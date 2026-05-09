@@ -130,6 +130,11 @@ html, body, #root {
   animation: pet-bob 2.6s ease-in-out infinite;
 }
 
+/* When usage hits alarm threshold, the whole sprite jitters. */
+.claude-pet.mood-alarm {
+  animation: pet-bob 2.6s ease-in-out infinite, pet-shake 0.18s linear infinite;
+}
+
 .pet-eye {
   transform-origin: center;
   transform-box: fill-box;
@@ -144,6 +149,12 @@ html, body, #root {
 @keyframes pet-blink {
   0%, 92%, 100% { transform: scaleY(1); }
   94%, 96% { transform: scaleY(0.1); }
+}
+
+@keyframes pet-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-1px); }
+  75% { transform: translateX(1px); }
 }
 
 /* ─── Ring animations ──────────────────────────────────────── */

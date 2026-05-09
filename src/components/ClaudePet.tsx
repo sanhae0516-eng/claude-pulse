@@ -3,21 +3,24 @@ interface ClaudePetProps {
 }
 
 /**
- * Claw'd — pixel-art sprite per the design spec.
+ * Claw'd — pixel-art mascot per the canonical design spec.
  *
  * Canvas: 320 × 208 px (20 × 13 grid of 16-px cells).
  * Each SVG unit = 1 grid cell = 16 px.
  * Body color #D96A47, eye color #000000.
- * shape-rendering: crispEdges keeps hard pixel boundaries (no anti-aliasing).
+ *
+ * Idle: bob + eye blink (always on, defined in widget.css).
+ * Mood expression: body color shifts; in alarm state eyes turn red and the
+ * whole sprite shakes.
  */
 export function ClaudePet({ mood }: ClaudePetProps) {
   const orange =
     mood === "alarm" ? "#E64545" : mood === "worried" ? "#D85B2E" : "#D96A47";
-  const eye = "#000000";
+  const eye = mood === "alarm" ? "#FF3B30" : "#000000";
 
   return (
     <svg
-      className="claude-pet"
+      className={`claude-pet mood-${mood}`}
       viewBox="0 0 20 13"
       preserveAspectRatio="xMidYMid meet"
       shapeRendering="crispEdges"
