@@ -7,7 +7,6 @@ export interface Settings {
   size: number;             // px, applied to both width & height (160..360)
   showCharacter: boolean;
   showWeek: boolean;
-  showCount: boolean;       // (no raw count anymore but kept for forward compat)
   colorScheme: ColorScheme;
   locked: boolean;          // when true, drag is disabled
 }
@@ -17,7 +16,6 @@ export const DEFAULTS: Settings = {
   size: 220,
   showCharacter: true,
   showWeek: true,
-  showCount: false,
   colorScheme: "mint",
   locked: false,
 };

@@ -1,0 +1,233 @@
+/* Settings panel — overlay inside the widget shell. */
+
+.settings-panel {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  background: rgba(15, 17, 23, 0.98);
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.settings-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.settings-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+/* Header */
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.settings-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--text-tertiary);
+}
+
+.settings-close {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.settings-close:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Body / sections */
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.settings-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Slider */
+
+.settings-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  cursor: pointer;
+}
+
+.settings-value {
+  font-size: 10px;
+  color: var(--text-secondary);
+  min-width: 30px;
+  text-align: right;
+}
+
+/* Checkbox / color presets */
+
+.settings-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-check input {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--text-primary);
+  cursor: pointer;
+}
+
+.settings-colors {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-color {
+  width: 28px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid transparent;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  overflow: hidden;
+  transition: border-color 150ms;
+}
+
+.settings-color span {
+  flex: 1;
+  height: 100%;
+}
+
+.settings-color.active {
+  border-color: var(--text-primary);
+}
+
+/* Divider + row + toggle */
+
+.settings-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-toggle {
+  position: relative;
+  width: 28px;
+  height: 14px;
+  border-radius: 7px;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: background 150ms var(--ease-default);
+  padding: 0;
+}
+
+.settings-toggle.on {
+  background: #6ee7b7;
+}
+
+.settings-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.settings-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 150ms var(--ease-default);
+}
+
+.settings-toggle.on .settings-toggle-knob {
+  transform: translateX(14px);
+}
+
+/* Quit button */
+
+.settings-quit {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 0;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: transparent;
+  color: var(--usage-high);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  letter-spacing: 0.04em;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 150ms var(--ease-default);
+}
+
+.settings-quit:hover {
+  background: rgba(248, 113, 113, 0.1);
+}

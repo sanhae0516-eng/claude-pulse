@@ -4,6 +4,7 @@ mod auth;
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
+
 #[tauri::command]
 async fn get_usage() -> Result<api::UsageSnapshot, String> {
     let token = auth::get_access_token().map_err(|e| e.to_string())?;
@@ -64,8 +65,6 @@ fn force_popup_style(hwnd_raw: usize) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--silent"]),

@@ -8,6 +8,7 @@ import {
   SIZE_STEP,
 } from "../lib/settings";
 import { inTauri } from "../lib/tauri";
+import "../styles/settings.css";
 
 interface SettingsPanelProps {
   settings: Settings;

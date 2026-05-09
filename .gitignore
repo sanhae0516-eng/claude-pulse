@@ -26,3 +26,9 @@ src-tauri/gen/
 # Env
 .env
 .env.local
+
+# Release artifacts (generated)
+release/
+ClaudePulse-*.zip
+release-notes-*.md
+
