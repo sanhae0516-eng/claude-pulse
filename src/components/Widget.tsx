@@ -6,7 +6,7 @@ import { CogButton } from "./ui/CogButton";
 import { inTauri } from "../lib/tauri";
 import { useUsage } from "../lib/useUsage";
 import { formatRemaining, msUntilReset } from "../lib/usage";
-import { useSettings, COLOR_PRESETS } from "../lib/settings";
+import { useSettings, getPalette } from "../lib/settings";
 import { useApplyWindowSize } from "../lib/window";
 
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
@@ -67,8 +67,7 @@ export function Widget() {
   const uRatio = five?.utilization ?? 0;
   const tRatio = timeProgress(five?.resetsAt ?? null, now);
   const remaining = formatRemaining(msUntilReset(five?.resetsAt ?? null, now));
-  const palette = COLOR_PRESETS[settings.colorScheme];
-  const color = uRatio < 0.6 ? palette.low : uRatio < 0.85 ? palette.mid : palette.high;
+  const palette = getPalette(settings);
   const mood = uRatio >= 0.95 ? "alarm" : uRatio >= 0.85 ? "worried" : "happy";
   const pulse = uRatio >= 0.95 ? "warning" : uRatio >= 0.8 ? "soft" : "none";
   const pct = Math.round(uRatio * 100);
@@ -84,21 +83,21 @@ export function Widget() {
         radius={47}
         thickness={1.8}
         progress={1 - tRatio}
-        color={palette.ring}
+        color={palette.timeRing}
         trackColor="rgba(255, 255, 255, 0.08)"
       />
       <Ring
         radius={40}
         thickness={3.6}
         progress={uRatio}
-        color={color}
+        color={palette.usageRing}
         trackColor="rgba(255, 255, 255, 0.06)"
         glow
         pulse={pulse}
       />
       <div className="widget-center" {...dragProps}>
         {settings.showCharacter && <ClaudePet mood={mood} />}
-        <div className="widget-pct mono" style={{ color }} {...dragProps}>
+        <div className="widget-pct mono" style={{ color: palette.number }} {...dragProps}>
           {pct}<span className="widget-pct-sym">%</span>
         </div>
         <div className="widget-remaining mono" {...dragProps}>{remaining}</div>

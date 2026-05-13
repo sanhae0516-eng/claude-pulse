@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 
-export type ColorScheme = "mint" | "blue" | "violet" | "rose";
+export type ColorScheme = "mint" | "blue" | "violet" | "rose" | "custom";
+
+export interface Palette {
+  usageRing: string;  // inner ring (usage %)
+  timeRing: string;   // outer ring (time until reset)
+  number: string;     // center percentage number
+}
 
 export interface Settings {
   opacity: number;          // 0.5..1.0
@@ -8,8 +14,16 @@ export interface Settings {
   showCharacter: boolean;
   showWeek: boolean;
   colorScheme: ColorScheme;
+  customPalette: Palette;   // active when colorScheme === "custom"
   locked: boolean;          // when true, drag is disabled
 }
+
+export const COLOR_PRESETS: Record<Exclude<ColorScheme, "custom">, Palette> = {
+  mint:   { usageRing: "#6EE7B7", timeRing: "#60A5FA", number: "#6EE7B7" },
+  blue:   { usageRing: "#60A5FA", timeRing: "#34D399", number: "#60A5FA" },
+  violet: { usageRing: "#C4B5FD", timeRing: "#FCD34D", number: "#C4B5FD" },
+  rose:   { usageRing: "#FDA4AF", timeRing: "#A78BFA", number: "#FDA4AF" },
+};
 
 export const DEFAULTS: Settings = {
   opacity: 1,
@@ -17,20 +31,44 @@ export const DEFAULTS: Settings = {
   showCharacter: true,
   showWeek: true,
   colorScheme: "mint",
+  customPalette: { ...COLOR_PRESETS.mint },
   locked: false,
 };
 
 export const SIZE_MIN = 160;
 export const SIZE_MAX = 360;
-export const SIZE_STEP = 20;
+export const SIZE_STEP = 5;
 
 const STORAGE_KEY = "claude-pulse:settings:v1";
+
+/**
+ * Migrate older stored palettes that used the {low, mid, high, ring} shape
+ * to the new {usageRing, timeRing, number} shape so existing users don't lose
+ * their custom color choice.
+ */
+function migratePalette(p: any): Palette {
+  if (!p || typeof p !== "object") return { ...DEFAULTS.customPalette };
+  if ("usageRing" in p && "timeRing" in p && "number" in p) {
+    return { ...DEFAULTS.customPalette, ...p };
+  }
+  // Legacy {low, mid, high, ring} shape
+  return {
+    usageRing: p.low ?? DEFAULTS.customPalette.usageRing,
+    timeRing: p.ring ?? DEFAULTS.customPalette.timeRing,
+    number: p.low ?? DEFAULTS.customPalette.number,
+  };
+}
 
 function load(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const stored = JSON.parse(raw);
+    return {
+      ...DEFAULTS,
+      ...stored,
+      customPalette: migratePalette(stored.customPalette),
+    };
   } catch {
     return DEFAULTS;
   }
@@ -53,9 +91,19 @@ export function useSettings(): [Settings, (p: Partial<Settings>) => void] {
   return [settings, patch];
 }
 
-export const COLOR_PRESETS: Record<ColorScheme, { low: string; mid: string; high: string; ring: string }> = {
-  mint:   { low: "#6EE7B7", mid: "#FCD34D", high: "#F87171", ring: "#60A5FA" },
-  blue:   { low: "#60A5FA", mid: "#A78BFA", high: "#F472B6", ring: "#34D399" },
-  violet: { low: "#C4B5FD", mid: "#F0ABFC", high: "#FB7185", ring: "#FCD34D" },
-  rose:   { low: "#FDA4AF", mid: "#FBBF24", high: "#EF4444", ring: "#A78BFA" },
-};
+/** Resolves the active palette for the current settings. */
+export function getPalette(settings: Settings): Palette {
+  if (settings.colorScheme === "custom") return settings.customPalette;
+  return COLOR_PRESETS[settings.colorScheme];
+}
+
+/** Channel metadata for the custom-palette editor UI. */
+export const PALETTE_CHANNELS: ReadonlyArray<{
+  key: keyof Palette;
+  label: string;
+  hint: string;
+}> = [
+  { key: "usageRing", label: "Usage ring", hint: "inner ring (% used)" },
+  { key: "timeRing",  label: "Time ring",  hint: "outer countdown ring" },
+  { key: "number",    label: "Number",     hint: "center % text" },
+];
