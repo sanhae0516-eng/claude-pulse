@@ -6,26 +6,39 @@ Claude Code (Max 플랜) 사용량을 실시간으로 보여주는 다크 글래
 - **내부 컬러 링** — 토큰 사용률 (60% 민트 → 85% 앰버 → 100% 코랄)
 - **가운데 숫자** — 사용률 % + 리셋까지 남은 시간
 
-## 동작 원리 (그리고 한계)
+## 동작 원리
 
-`~/.claude/projects/**/*.jsonl` 의 `assistant` 메시지 수를 세서
-최근 5시간 윈도우 내 사용량을 추정합니다.
+Claude Code 의 `/usage` 슬래시 명령이 호출하는 것과 **동일한** 인증
+엔드포인트 (`https://api.anthropic.com/api/oauth/usage`) 를 직접 호출합니다.
+Anthropic 서버의 가중치 기반 정확한 수치 (Opus·Sonnet 차등, 캐시 정책 반영) 를
+그대로 받아오므로 `/usage` 와 일치합니다.
 
-- 윈도우 시작 = 5h 내 가장 오래된 assistant 메시지
-- 리셋 = 윈도우 시작 + 5h
-- 기본 한도 = 200 메시지 (Max 5x 추정치, `parser.rs::DEFAULT_LIMIT`)
+토큰 흐름 (Windows 기준):
 
-### 정확도에 대한 솔직한 고지
+1. `%APPDATA%\Claude\Local State` 에서 `os_crypt.encrypted_key` 를 읽어
+   DPAPI 로 복호화 → AES-256 마스터키 획득 (Chromium v10 cookie 방식과 동일)
+2. `%APPDATA%\Claude\config.json` 의 `oauth:tokenCache` 를 AES-256-GCM 으로
+   복호화 → OAuth access token 추출
+3. 추출된 토큰으로 `/api/oauth/usage` 에 `anthropic-beta: oauth-2025-04-20`
+   헤더와 함께 호출
 
-**위젯의 % 는 근사치입니다 (`~44%` 같이 틸데로 표기).**
+구현은 [src-tauri/src/auth.rs](./src-tauri/src/auth.rs) 와
+[src-tauri/src/api.rs](./src-tauri/src/api.rs) 참고.
 
-Claude Code 내장 `/usage` 명령은 Anthropic 서버의 가중치 기반 정확한 수치를
-반환하지만, 그 데이터는 인터랙티브 모드에서만 접근 가능하고 외부 앱이
-호출할 공개 API가 없습니다. (Opus·Sonnet 차등 가중치, 캐시 정책 등은 비공개.)
+### 요구사항
 
-이 위젯은 로컬 JSONL 의 메시지 수를 세는 것뿐이므로 Claude 의 공식 % 와
-정확히 일치하지 않습니다. 자기 환경에 맞춰 조정하려면 `DEFAULT_LIMIT` 를
-수정하거나, 향후 추가될 `~/.claude-pulse/config.json` 으로 오버라이드하세요.
+- **Claude Desktop 앱이 설치되어 있고 로그인되어 있어야 합니다.** OAuth 토큰
+  캐시를 Claude Desktop 이 관리하기 때문입니다. Claude Code CLI 만 설치된
+  상태로는 동작하지 않습니다 (CLI 는 `~/.claude/projects/` 에 별도 저장).
+- Windows 외 OS 는 현재 토큰 복호화 경로가 미구현 (`auth.rs` 의
+  `dpapi_decrypt` 가 Windows-only).
+
+### 문제 진단
+
+위젯이 데이터를 못 가져오면 다음 두 로그 파일을 확인하세요 (append 모드):
+
+- `%LOCALAPPDATA%\claude-pulse-auth-debug.log` — 토큰 단계별 성공/실패
+- `%LOCALAPPDATA%\claude-pulse-debug.log` — `/usage` HTTP 응답
 
 ## 개발
 

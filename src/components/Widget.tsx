@@ -28,6 +28,17 @@ function shortError(e: string): string {
   const lower = e.toLowerCase();
   if (e.includes("429") || lower.includes("rate_limit")) return "rate-limited · retrying";
   if (e.includes("401") || lower.includes("auth")) return "auth — open Claude Desktop";
+  // AuthError variants: NotFound / Decode / Decrypt / Parse — all surface as
+  // "<variant>: …" from auth.rs. Map them to a user-actionable hint so the
+  // widget stops showing a generic "retrying…" when Claude Desktop's token
+  // cache is missing, locked, or unreadable.
+  if (
+    lower.includes("not found") ||
+    lower.includes("decrypt") ||
+    lower.includes("decode") ||
+    lower.includes("parse")
+  )
+    return "token — open Claude Desktop";
   if (lower.includes("request") || lower.includes("network")) return "offline · retrying";
   return "retrying…";
 }

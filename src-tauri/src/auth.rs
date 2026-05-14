@@ -151,10 +151,17 @@ fn aes_gcm_decrypt(key: &[u8], blob: &[u8]) -> Result<Vec<u8>, AuthError> {
 }
 
 fn debug_log(msg: &str) {
+    use std::io::Write;
     let path = dirs::cache_dir()
         .unwrap_or_else(std::env::temp_dir)
         .join("claude-pulse-auth-debug.log");
-    let _ = std::fs::write(&path, msg);
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(f, "[{}] {}", chrono::Utc::now(), msg);
+    }
 }
 
 /// Recursively dumps the JSON shape (key names + value types/lengths) without
@@ -223,24 +230,43 @@ fn pick_claude_code_entry(root: &serde_json::Value) -> Option<&serde_json::Value
 
 /// Returns the OAuth access token from Claude Desktop's encrypted store.
 pub fn get_access_token() -> Result<String, AuthError> {
-    let key = read_master_key()?;
-    let blob = read_token_blob()?;
-    let plaintext = aes_gcm_decrypt(&key, &blob)?;
+    debug_log("--- get_access_token start ---");
 
-    let root: serde_json::Value = serde_json::from_slice(&plaintext)
-        .map_err(|e| AuthError::Parse(format!("token plaintext is not JSON: {e}")))?;
+    let key = read_master_key().map_err(|e| {
+        debug_log(&format!("read_master_key FAILED: {e}"));
+        e
+    })?;
+    debug_log(&format!("read_master_key ok (key_len={})", key.len()));
 
-    // Always log shape so we can verify field mapping (no secrets — only key names + lengths).
-    debug_log(&format!(
-        "plaintext_len={}\nfull_shape:\n{}\n",
-        plaintext.len(),
-        shape(&root, 0)
-    ));
+    let blob = read_token_blob().map_err(|e| {
+        debug_log(&format!("read_token_blob FAILED: {e}"));
+        e
+    })?;
+    debug_log(&format!("read_token_blob ok (blob_len={})", blob.len()));
 
-    let entry = pick_claude_code_entry(&root)
-        .ok_or_else(|| AuthError::Parse("no claude_code or api.anthropic.com entry in token cache".into()))?;
+    let plaintext = aes_gcm_decrypt(&key, &blob).map_err(|e| {
+        debug_log(&format!("aes_gcm_decrypt FAILED: {e}"));
+        e
+    })?;
+    debug_log(&format!("aes_gcm_decrypt ok (plaintext_len={})", plaintext.len()));
 
-    find_access_token(entry).ok_or_else(|| {
+    let root: serde_json::Value = serde_json::from_slice(&plaintext).map_err(|e| {
+        debug_log(&format!("plaintext JSON parse FAILED: {e}"));
+        AuthError::Parse(format!("token plaintext is not JSON: {e}"))
+    })?;
+
+    // Log shape so we can verify field mapping (no secrets — only key names + lengths).
+    debug_log(&format!("plaintext_shape: {}", shape(&root, 0)));
+
+    let entry = pick_claude_code_entry(&root).ok_or_else(|| {
+        debug_log("pick_claude_code_entry FAILED: no matching entry");
+        AuthError::Parse("no claude_code or api.anthropic.com entry in token cache".into())
+    })?;
+
+    let token = find_access_token(entry).ok_or_else(|| {
+        debug_log("find_access_token FAILED: no access_token field in entry");
         AuthError::Parse("access_token not found in entry — see auth-debug.log".into())
-    })
+    })?;
+    debug_log(&format!("get_access_token ok (token_len={})", token.len()));
+    Ok(token)
 }

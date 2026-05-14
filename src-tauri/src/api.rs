@@ -54,10 +54,17 @@ fn extract_bucket(v: &serde_json::Value) -> Option<UsageBucket> {
 }
 
 fn debug_log(msg: &str) {
+    use std::io::Write;
     let path = dirs::cache_dir()
         .unwrap_or_else(std::env::temp_dir)
         .join("claude-pulse-debug.log");
-    let _ = std::fs::write(&path, msg);
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(f, "[{}] {}", chrono::Utc::now(), msg);
+    }
 }
 
 pub async fn fetch_usage(token: &str) -> Result<UsageSnapshot, String> {
@@ -78,8 +85,7 @@ pub async fn fetch_usage(token: &str) -> Result<UsageSnapshot, String> {
     let text = resp.text().await.map_err(|e| e.to_string())?;
 
     debug_log(&format!(
-        "[{}] /usage status={} body_len={}\n{}\n",
-        chrono::Utc::now(),
+        "/usage status={} body_len={} body_preview={}",
         status,
         text.len(),
         text.chars().take(2000).collect::<String>()
