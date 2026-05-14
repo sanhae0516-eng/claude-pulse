@@ -170,6 +170,94 @@ html, body, #root {
   50% { opacity: 0.4; }
 }
 
+/* ─── Speech bubble (Claw'd talk mode) ────────────────────── */
+
+/* Wrapper around Claw'd that anchors the bubble RIGHT above the pet
+   regardless of widget size / vertical centering. */
+.claude-pet-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: clamp(2px, 1cqmin, 4px);
+}
+
+.speech-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(90cqmin, 180px);
+  padding: 4px 9px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #1a1a1a;
+  font-family: var(--font-pixel);
+  font-size: clamp(9px, 5cqmin, 12px);
+  font-weight: 400;
+  border-radius: 8px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+  z-index: 20;
+  cursor: pointer;
+  text-align: center;
+  word-break: keep-all;
+  line-height: 1.3;
+  letter-spacing: 0;
+  animation: bubble-pop 0.18s ease-out;
+  /* Crisp pixel-font rendering */
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid rgba(255, 255, 255, 0.96);
+}
+
+.speech-bubble-caret {
+  display: inline-block;
+  margin-left: 1px;
+  animation: caret-blink 0.6s steps(2) infinite;
+  color: #1a1a1a;
+}
+
+/* Usage-level prefix glyph — appears before text the moment the bubble pops
+   in (not part of the typing animation), so the user sees the category at a
+   glance: 빈 원→채워가는 원→꽉 찬 원→경고 삼각형. Colors darken progressively
+   to stay readable on the white bubble background. */
+.speech-bubble[data-tag]::before {
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: baseline;
+  font-weight: 400;
+}
+.speech-bubble[data-tag="usage-low"]::before  { content: "◌"; color: #10B981; }
+.speech-bubble[data-tag="usage-mid"]::before  { content: "◐"; color: #F59E0B; }
+.speech-bubble[data-tag="usage-high"]::before { content: "◉"; color: #EA580C; }
+.speech-bubble[data-tag="usage-alarm"]::before { content: "▲"; color: #DC2626; }
+
+@keyframes bubble-pop {
+  0%   { transform: translateX(-50%) translateY(2px) scale(0.85); opacity: 0; }
+  100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes caret-blink {
+  0%, 50%      { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+.claude-pet.is-clickable:hover {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55)) brightness(1.08);
+}
+
 /* ─── Cog button ───────────────────────────────────────────── */
 
 .widget-cog {

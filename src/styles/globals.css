@@ -24,10 +24,21 @@
   /* Type — Pretendard 통일, 숫자는 tabular-nums 로 자릿수 정렬 */
   --font-sans: "Pretendard Variable", "Pretendard", -apple-system, system-ui, sans-serif;
   --font-mono: var(--font-sans);
+  --font-pixel: "Galmuri11", "Pretendard", system-ui, sans-serif;
 
   /* Motion */
   --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out-strong: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@font-face {
+  font-family: "Galmuri11";
+  src:
+    url("/fonts/Galmuri11.woff2") format("woff2"),
+    url("/fonts/Galmuri11.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
 * {

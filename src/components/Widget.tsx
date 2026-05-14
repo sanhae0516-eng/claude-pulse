@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Ring } from "./Ring";
 import { ClaudePet } from "./ClaudePet";
 import { SettingsPanel } from "./SettingsPanel";
+import { SpeechBubble } from "./SpeechBubble";
 import { CogButton } from "./ui/CogButton";
 import { inTauri } from "../lib/tauri";
 import { useUsage } from "../lib/useUsage";
 import { formatRemaining, msUntilReset } from "../lib/usage";
 import { useSettings, getPalette } from "../lib/settings";
 import { useApplyWindowSize } from "../lib/window";
+import { sound, setSoundsEnabled, setVoiceEnabled, setVoiceVolume } from "../lib/sound";
+import { pickLine, makeContext, type PickedLine } from "../lib/clawd-lines";
 
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 
@@ -30,6 +33,63 @@ export function Widget() {
   const [showSettings, setShowSettings] = useState(false);
   const [settings, patchSettings] = useSettings();
   useApplyWindowSize(settings.size);
+
+  // Sync the sound module's master switch with the persisted setting.
+  useEffect(() => {
+    setSoundsEnabled(settings.soundsEnabled);
+  }, [settings.soundsEnabled]);
+
+  // Voice settings sync.
+  useEffect(() => {
+    setVoiceEnabled(settings.voiceEnabled);
+  }, [settings.voiceEnabled]);
+  useEffect(() => {
+    setVoiceVolume(settings.voiceVolume);
+  }, [settings.voiceVolume]);
+
+  const openSettings = () => {
+    sound.click();
+    setShowSettings(true);
+  };
+
+  // ── Claw'd talk-toggle mode ─────────────────────────────
+  // Clicking Claw'd toggles the talk mode. While active, new lines pop up
+  // automatically on a fixed cadence. Click again to silence.
+  const [talkActive, setTalkActive] = useState(false);
+  const [speech, setSpeech] = useState<PickedLine | null>(null);
+  const [lineKey, setLineKey] = useState(0);
+
+  // Keep a live ref to the current usage % so the timer loop can read it
+  // without having to be reset every minute.
+  const usagePctRef = useRef(0);
+  usagePctRef.current = Math.round((snap?.fiveHour?.utilization ?? 0) * 100);
+
+  const toggleTalk = () => {
+    sound.speak();
+    setTalkActive((v) => !v);
+  };
+
+  useEffect(() => {
+    if (!talkActive) {
+      setSpeech(null);
+      return;
+    }
+    let cancelled = false;
+    let timer: number | undefined;
+    const showNext = () => {
+      if (cancelled) return;
+      const picked = pickLine(makeContext(usagePctRef.current));
+      setSpeech(picked);
+      setLineKey((k) => k + 1);
+      // Cycle: typing (~15 chars × 55ms ≈ 1s) + hold + gap ≈ 8s total
+      timer = window.setTimeout(showNext, 8000);
+    };
+    showNext();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [talkActive]);
 
   const wrapperStyle = { opacity: settings.opacity } as React.CSSProperties;
   const dragProps =
@@ -57,7 +117,7 @@ export function Widget() {
           <div className="widget-loading-dots mono" {...dragProps}>•••</div>
           <div className="widget-loading-hint" {...dragProps}>{hint}</div>
         </div>
-        <CogButton onClick={() => setShowSettings(true)} />
+        <CogButton onClick={openSettings} />
       </div>
     );
   }
@@ -96,7 +156,23 @@ export function Widget() {
         pulse={pulse}
       />
       <div className="widget-center" {...dragProps}>
-        {settings.showCharacter && <ClaudePet mood={mood} />}
+        {settings.showCharacter && (
+          <div className="claude-pet-wrap">
+            {speech && (
+              <SpeechBubble
+                key={lineKey}
+                text={speech.text}
+                tag={speech.tag}
+                autoDismiss={!talkActive}
+                onDismiss={() => {
+                  if (talkActive) setTalkActive(false);
+                  else setSpeech(null);
+                }}
+              />
+            )}
+            <ClaudePet mood={mood} onClick={toggleTalk} />
+          </div>
+        )}
         <div className="widget-pct mono" style={{ color: palette.number }} {...dragProps}>
           {pct}<span className="widget-pct-sym">%</span>
         </div>
@@ -105,7 +181,7 @@ export function Widget() {
           <div className="widget-week mono" {...dragProps}>week {weekPct}%</div>
         )}
       </div>
-      <CogButton onClick={() => setShowSettings(true)} />
+      <CogButton onClick={openSettings} />
     </div>
   );
 }

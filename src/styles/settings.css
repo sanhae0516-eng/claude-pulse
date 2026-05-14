@@ -43,6 +43,43 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* Tab bar — splits the body into Display / Sound / System sub-pages so
+   a single scroll doesn't have to fit every control at once. */
+
+.settings-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.settings-tab {
+  flex: 1;
+  padding: 5px 2px 6px;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid transparent;
+  margin-bottom: -1px; /* overlap the bar's bottom border so active underline aligns */
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 150ms var(--ease-default), border-color 150ms var(--ease-default);
+}
+
+.settings-tab:hover {
+  color: var(--text-secondary);
+}
+
+.settings-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
+}
+
 /* Body — scrollable middle area */
 
 .settings-body {
@@ -218,32 +255,7 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* Custom palette — 4 channel rows */
-
-.settings-custom-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.settings-mini-btn {
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: none;
-  color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-  padding: 2px 7px;
-  cursor: pointer;
-  transition: background 150ms;
-}
-
-.settings-mini-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-}
+/* Custom palette — channel rows */
 
 .settings-palette-grid {
   display: flex;
@@ -349,6 +361,31 @@
 
 .settings-quit:hover {
   background: rgba(248, 113, 113, 0.1);
+}
+
+.settings-reset {
+  margin-top: 6px;
+  width: 100%;
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 150ms var(--ease-default), background 150ms var(--ease-default);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.15);
+  text-underline-offset: 3px;
+}
+
+.settings-reset:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  text-decoration-color: rgba(255, 255, 255, 0.3);
 }
 
 /* Footer (sticky at bottom) — Revert + Save buttons */

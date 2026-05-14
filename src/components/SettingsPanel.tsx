@@ -5,12 +5,14 @@ import {
   COLOR_PRESETS,
   PALETTE_CHANNELS,
   type ColorScheme,
+  DEFAULTS,
   SIZE_MIN,
   SIZE_MAX,
   SIZE_STEP,
 } from "../lib/settings";
 import { isValidHex, normalizeHex } from "../lib/color";
 import { inTauri } from "../lib/tauri";
+import { sound, setSoundsEnabled, tick, voice } from "../lib/sound";
 import "../styles/settings.css";
 
 interface SettingsPanelProps {
@@ -19,7 +21,17 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
+type SettingsTab = "display" | "custom" | "sound" | "system";
+
+const TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
+  { id: "display", label: "Display" },
+  { id: "custom",  label: "Custom" },
+  { id: "sound",   label: "Sound" },
+  { id: "system",  label: "System" },
+];
+
 export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProps) {
+  const [tab, setTab] = useState<SettingsTab>("display");
   const [autostartEnabled, setAutostartEnabled] = useState(false);
   const [autostartReady, setAutostartReady] = useState(false);
 
@@ -53,6 +65,7 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
   }, []);
 
   const toggleAutostart = async () => {
+    (autostartEnabled ? sound.toggleOff : sound.toggleOn)();
     if (!inTauri()) {
       setAutostartEnabled((v) => !v);
       return;
@@ -68,6 +81,7 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
   };
 
   const quit = async () => {
+    sound.warn();
     if (!inTauri()) {
       onClose();
       return;
@@ -81,25 +95,48 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
   };
 
   const commitSize = () => {
+    // No click on commit — the drag tick stream already gave audible feedback.
     if (draftSize !== settings.size) onChange({ size: draftSize });
   };
 
-  const updateChannel = (key: keyof Palette, hex: string) =>
+  const updateChannel = (key: keyof Palette, hex: string) => {
+    sound.select();
     onChange({
       colorScheme: "custom",
       customPalette: { ...settings.customPalette, [key]: hex },
     });
+  };
 
-  const copyPresetToCustom = () =>
-    onChange({
-      colorScheme: "custom",
-      customPalette: { ...COLOR_PRESETS[
-        settings.colorScheme === "custom" ? "mint" : settings.colorScheme
-      ] },
-    });
+  /** Selecting a preset also seeds the custom palette with its colors,
+   *  so the channel rows below show the preset's values and the user can
+   *  tweak from there. Editing any channel afterwards flips colorScheme
+   *  back to "custom" automatically. */
+  const selectPreset = (key: Exclude<ColorScheme, "custom">) => {
+    sound.select();
+    onChange({ colorScheme: key, customPalette: { ...COLOR_PRESETS[key] } });
+  };
 
   const revert = () => {
+    sound.warn();
     onChange(snapshot);
+    onClose();
+  };
+
+  const resetToDefaults = () => {
+    sound.warn();
+    // Replace every field with its factory default. The snapshot is left
+    // alone, so Revert can still bring back what was loaded when the panel
+    // opened (if the user resets by mistake).
+    onChange(DEFAULTS);
+  };
+
+  const done = () => {
+    sound.confirm();
+    onClose();
+  };
+
+  const closeSilent = () => {
+    sound.click();
     onClose();
   };
 
@@ -109,125 +146,222 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
         <span className="settings-title">SETTINGS</span>
         <button
           className="settings-close"
-          onClick={onClose}
+          onClick={closeSilent}
           aria-label="close settings"
         >
           ✕
         </button>
       </div>
 
+      <div className="settings-tabs" role="tablist">
+        {TABS.map(({ id, label }) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            className={`settings-tab ${tab === id ? "active" : ""}`}
+            onClick={() => {
+              if (tab !== id) sound.select();
+              setTab(id);
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="settings-body">
-        <Section label="Size">
-          <input
-            type="range"
-            min={SIZE_MIN}
-            max={SIZE_MAX}
-            step={SIZE_STEP}
-            value={draftSize}
-            onChange={(e) => setDraftSize(Number(e.target.value))}
-            onPointerUp={commitSize}
-            onKeyUp={commitSize}
-            onBlur={commitSize}
-            className="settings-slider"
-          />
-          <span className="settings-value mono">{draftSize}</span>
-        </Section>
-
-        <Section label="Opacity">
-          <input
-            type="range"
-            min={50}
-            max={100}
-            step={5}
-            value={Math.round(settings.opacity * 100)}
-            onChange={(e) => onChange({ opacity: Number(e.target.value) / 100 })}
-            className="settings-slider"
-          />
-          <span className="settings-value mono">{Math.round(settings.opacity * 100)}%</span>
-        </Section>
-
-        <Section label="Show">
-          <label className="settings-check">
-            <input
-              type="checkbox"
-              checked={settings.showCharacter}
-              onChange={(e) => onChange({ showCharacter: e.target.checked })}
-            />
-            <span>Claw'd</span>
-          </label>
-          <label className="settings-check">
-            <input
-              type="checkbox"
-              checked={settings.showWeek}
-              onChange={(e) => onChange({ showWeek: e.target.checked })}
-            />
-            <span>weekly</span>
-          </label>
-        </Section>
-
-        <Section label="Color · Presets">
-          <div className="settings-colors">
-            {(Object.keys(COLOR_PRESETS) as Exclude<ColorScheme, "custom">[]).map((key) => (
-              <button
-                key={key}
-                className={`settings-color ${settings.colorScheme === key ? "active" : ""}`}
-                onClick={() => onChange({ colorScheme: key })}
-                aria-label={key}
-              >
-                <span style={{ background: COLOR_PRESETS[key].usageRing }} />
-                <span style={{ background: COLOR_PRESETS[key].timeRing }} />
-                <span style={{ background: COLOR_PRESETS[key].number }} />
-              </button>
-            ))}
-          </div>
-        </Section>
-
-        <div className="settings-section">
-          <div className="settings-label settings-custom-header">
-            <span>Color · Custom</span>
-            <button
-              className="settings-mini-btn"
-              onClick={copyPresetToCustom}
-              title="Copy current preset values into custom"
-            >
-              Copy preset
-            </button>
-          </div>
-          <div className="settings-palette-grid">
-            {PALETTE_CHANNELS.map(({ key, label, hint }) => (
-              <ChannelRow
-                key={key}
-                label={label}
-                hint={hint}
-                hex={settings.customPalette[key]}
-                onChange={(hex) => updateChannel(key, hex)}
+        {tab === "display" && (
+          <>
+            <Section label="Size">
+              <input
+                type="range"
+                min={SIZE_MIN}
+                max={SIZE_MAX}
+                step={SIZE_STEP}
+                value={draftSize}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setDraftSize(v);
+                  tick(v, SIZE_MIN, SIZE_MAX);
+                }}
+                onPointerUp={commitSize}
+                onKeyUp={commitSize}
+                onBlur={commitSize}
+                className="settings-slider"
               />
-            ))}
-          </div>
-        </div>
+              <span className="settings-value mono">{draftSize}</span>
+            </Section>
 
-        <div className="settings-divider" />
+            <Section label="Opacity">
+              <input
+                type="range"
+                min={50}
+                max={100}
+                step={5}
+                value={Math.round(settings.opacity * 100)}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  tick(v, 50, 100);
+                  onChange({ opacity: v / 100 });
+                }}
+                className="settings-slider"
+              />
+              <span className="settings-value mono">{Math.round(settings.opacity * 100)}%</span>
+            </Section>
 
-        <label className="settings-row">
-          <span>Lock position</span>
-          <Toggle
-            checked={settings.locked}
-            onChange={(v) => onChange({ locked: v })}
-          />
-        </label>
+            <Section label="Show">
+              <label className="settings-check">
+                <input
+                  type="checkbox"
+                  checked={settings.showCharacter}
+                  onChange={(e) => {
+                    (e.target.checked ? sound.toggleOn : sound.toggleOff)();
+                    onChange({ showCharacter: e.target.checked });
+                  }}
+                />
+                <span>Claw'd</span>
+              </label>
+              <label className="settings-check">
+                <input
+                  type="checkbox"
+                  checked={settings.showWeek}
+                  onChange={(e) => {
+                    (e.target.checked ? sound.toggleOn : sound.toggleOff)();
+                    onChange({ showWeek: e.target.checked });
+                  }}
+                />
+                <span>weekly</span>
+              </label>
+            </Section>
 
-        <label className="settings-row">
-          <span>Start with system</span>
-          <Toggle
-            checked={autostartEnabled}
-            onChange={toggleAutostart}
-            disabled={!autostartReady}
-          />
-        </label>
+            <Section label="Color · Presets">
+              <div className="settings-colors">
+                {(Object.keys(COLOR_PRESETS) as Exclude<ColorScheme, "custom">[]).map((key) => (
+                  <button
+                    key={key}
+                    className={`settings-color ${settings.colorScheme === key ? "active" : ""}`}
+                    onClick={() => selectPreset(key)}
+                    aria-label={key}
+                    title={`Apply ${key} preset (also seeds the Custom tab)`}
+                  >
+                    <span style={{ background: COLOR_PRESETS[key].usageRing }} />
+                    <span style={{ background: COLOR_PRESETS[key].timeRing }} />
+                    <span style={{ background: COLOR_PRESETS[key].number }} />
+                  </button>
+                ))}
+              </div>
+            </Section>
+          </>
+        )}
 
-        <button className="settings-quit" onClick={quit}>
-          Quit
-        </button>
+        {tab === "custom" && (
+          <Section label="Color · Custom">
+            <div className="settings-palette-grid">
+              {PALETTE_CHANNELS.map(({ key, label, hint }) => (
+                <ChannelRow
+                  key={key}
+                  label={label}
+                  hint={hint}
+                  hex={settings.customPalette[key]}
+                  onChange={(hex) => updateChannel(key, hex)}
+                />
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {tab === "sound" && (
+          <>
+            <label className="settings-row">
+              <span>UI sounds</span>
+              <Toggle
+                checked={settings.soundsEnabled}
+                onChange={(v) => {
+                  // Play the toggle's own sound BEFORE we disable the system,
+                  // otherwise turning sounds off makes no audible feedback.
+                  if (v) {
+                    setSoundsEnabled(true);
+                    sound.toggleOn();
+                  } else {
+                    sound.toggleOff();
+                    setSoundsEnabled(false);
+                  }
+                  onChange({ soundsEnabled: v });
+                }}
+              />
+            </label>
+
+            <label className="settings-row">
+              <span>Claw'd voice</span>
+              <Toggle
+                checked={settings.voiceEnabled}
+                onChange={(v) => {
+                  (v ? sound.toggleOn : sound.toggleOff)();
+                  onChange({ voiceEnabled: v });
+                }}
+              />
+            </label>
+
+            {settings.voiceEnabled && (
+              <Section label="Voice volume">
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Math.round(settings.voiceVolume * 100)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    onChange({ voiceVolume: v / 100 });
+                    // Live audible preview at the new volume.
+                    voice("가");
+                  }}
+                  className="settings-slider"
+                />
+                <span className="settings-value mono">
+                  {Math.round(settings.voiceVolume * 100)}%
+                </span>
+              </Section>
+            )}
+          </>
+        )}
+
+        {tab === "system" && (
+          <>
+            <label className="settings-row">
+              <span>Lock position</span>
+              <Toggle
+                checked={settings.locked}
+                onChange={(v) => {
+                  (v ? sound.toggleOn : sound.toggleOff)();
+                  onChange({ locked: v });
+                }}
+              />
+            </label>
+
+            <label className="settings-row">
+              <span>Start with system</span>
+              <Toggle
+                checked={autostartEnabled}
+                onChange={toggleAutostart}
+                disabled={!autostartReady}
+              />
+            </label>
+
+            <button className="settings-quit" onClick={quit}>
+              Quit
+            </button>
+
+            <button
+              className="settings-reset"
+              onClick={resetToDefaults}
+              title="Restore every setting to factory defaults"
+            >
+              Reset to defaults
+            </button>
+          </>
+        )}
       </div>
 
       <div className="settings-footer">
@@ -241,9 +375,9 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
         </button>
         <button
           className="settings-btn settings-btn-primary"
-          onClick={onClose}
+          onClick={done}
         >
-          Save
+          Done
         </button>
       </div>
     </div>

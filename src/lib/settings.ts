@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export type ColorScheme = "mint" | "blue" | "violet" | "rose" | "custom";
+export type ColorScheme = "claude" | "mint" | "blue" | "violet" | "rose" | "custom";
 
 export interface Palette {
   usageRing: string;  // inner ring (usage %)
@@ -16,9 +16,13 @@ export interface Settings {
   colorScheme: ColorScheme;
   customPalette: Palette;   // active when colorScheme === "custom"
   locked: boolean;          // when true, drag is disabled
+  soundsEnabled: boolean;   // UI click / toggle sounds
+  voiceEnabled: boolean;    // Claw'd typing voice (per-character blips)
+  voiceVolume: number;      // 0..1 voice gain multiplier
 }
 
 export const COLOR_PRESETS: Record<Exclude<ColorScheme, "custom">, Palette> = {
+  claude: { usageRing: "#D97757", timeRing: "#C9B89A", number: "#C7503A" },
   mint:   { usageRing: "#6EE7B7", timeRing: "#60A5FA", number: "#6EE7B7" },
   blue:   { usageRing: "#60A5FA", timeRing: "#34D399", number: "#60A5FA" },
   violet: { usageRing: "#C4B5FD", timeRing: "#FCD34D", number: "#C4B5FD" },
@@ -30,9 +34,12 @@ export const DEFAULTS: Settings = {
   size: 220,
   showCharacter: true,
   showWeek: true,
-  colorScheme: "mint",
-  customPalette: { ...COLOR_PRESETS.mint },
+  colorScheme: "claude",
+  customPalette: { ...COLOR_PRESETS.claude },
   locked: false,
+  soundsEnabled: true,
+  voiceEnabled: true,
+  voiceVolume: 0.5,
 };
 
 export const SIZE_MIN = 160;
