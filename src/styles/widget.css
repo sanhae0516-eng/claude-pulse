@@ -9,14 +9,18 @@ html, body, #root {
   position: relative;
   width: 100%;
   height: 100%;
-  border-radius: 24px;
-  background: var(--surface-base);
+  /* Matches the music window (.mini-player): 18px corners, no inset
+     highlight. Combined with SetWindowRgn removal in lib.rs, this lets
+     backdrop-filter sample the full desktop and gives the widget the
+     same translucent glass feel as the player. Background uses the
+     lighter --surface-widget so the dense content (rings + large %)
+     doesn't perceptually darken the overall tone. */
+  border-radius: 18px;
+  background: var(--surface-widget);
   backdrop-filter: blur(var(--blur)) saturate(160%);
   -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
   border: 1px solid var(--border);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -133,6 +137,19 @@ html, body, #root {
 /* When usage hits alarm threshold, the whole sprite jitters. */
 .claude-pet.mood-alarm {
   animation: pet-bob 2.6s ease-in-out infinite, pet-shake 0.18s linear infinite;
+}
+
+/* When music is playing, Claw'd dances (BC-1 — light jump + tilt + squash).
+   Replaces pet-bob entirely. Speed-tuned to ~0.85s so it reads as a beat. */
+.claude-pet.mood-dancing {
+  animation: pet-dance-bc1 0.85s ease-in-out infinite;
+}
+
+@keyframes pet-dance-bc1 {
+  0%, 100% { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+  25%      { transform: translate(-1.5px,-4px) rotate(-3deg) scaleY(0.94); }
+  50%      { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+  75%      { transform: translate(1.5px, -4px) rotate(3deg)  scaleY(0.94); }
 }
 
 .pet-eye {
@@ -281,4 +298,181 @@ html, body, #root {
 .widget-cog:hover {
   color: var(--text-secondary);
   background: rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Music button (mirror of CogButton, bottom-left) ──────────── */
+
+.widget-music {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 150ms var(--ease-default), background 150ms var(--ease-default);
+  z-index: 10;
+}
+
+.widget-music:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Music notes (Claw'd dancing) ─────────────────────────────────
+   Pixel-art notes that bubble up around Claw'd while music is playing.
+   Layout values were dialed in via the dance-mode playground demo and
+   are encoded here as CSS variables so they're easy to tweak later.
+
+   Spawn cluster: tight around the character's shoulders/head, all 4
+   notes sit at the same vertical anchor (--v-spread: 0) but spread
+   horizontally — the gap between n1↔n2 and n3↔n4 controlled by
+   --h-spread. The motion is three-phase: pop-in → rise+sway → burst.
+   A matching burst-ring pops at the end of each note's path. */
+
+.mn-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* z-index 5 keeps notes *below* the speech bubble (z 20) — the default
+     "말풍선 위" picked in the playground. So when Claw'd talks, the bubble
+     reads cleanly while notes drift behind it. */
+  z-index: 5;
+
+  /* Playground-confirmed coordinates (220px widget + simulated widget-center
+     layout). All percentages are of the *widget* box, same as the demo. */
+  --mn-cluster-x: 50%;
+  --mn-cluster-y: 63%;
+  --mn-h-spread: 16%;
+  --mn-v-spread: 0%;
+  --mn-note-size: clamp(5px, 3.2cqmin, 11px); /* 7px at 220px widget */
+  --mn-note-color: rgba(255, 255, 255, 0.92);
+  --mn-duration: 2s;
+}
+
+.mn-note {
+  position: absolute;
+  width: var(--mn-note-size);
+  height: auto;
+  color: var(--mn-note-color);
+  opacity: 0;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.25));
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+  animation-duration: var(--mn-duration);
+  transform-origin: center;
+}
+
+/* Shoulder pair (n1, n2) and head pair (n3, n4). At --v-spread: 0 the
+   two pairs land on the same y line, but n3/n4 still horizontally
+   "thread" between n1/n2 because their horizontal offset is half. */
+.mn-n1 {
+  left:   calc(var(--mn-cluster-x) - var(--mn-h-spread) / 2);
+  bottom: calc(var(--mn-cluster-y) - var(--mn-v-spread) / 2);
+  animation-name: mn-rise-L; animation-delay: 0s;
+}
+.mn-n2 {
+  left:   calc(var(--mn-cluster-x) + var(--mn-h-spread) / 2);
+  bottom: calc(var(--mn-cluster-y) - var(--mn-v-spread) / 2);
+  animation-name: mn-rise-R; animation-delay: 0.5s;
+}
+.mn-n3 {
+  left:   calc(var(--mn-cluster-x) - var(--mn-h-spread) / 4);
+  bottom: calc(var(--mn-cluster-y) + var(--mn-v-spread) / 2);
+  animation-name: mn-rise-up; animation-delay: 1s;
+}
+.mn-n4 {
+  left:   calc(var(--mn-cluster-x) + var(--mn-h-spread) / 4);
+  bottom: calc(var(--mn-cluster-y) + var(--mn-v-spread) / 2);
+  animation-name: mn-rise-up; animation-delay: 1.5s;
+}
+
+@keyframes mn-rise-L {
+  0%   { transform: translate(0, 0)        rotate(0deg)  scale(0.2); opacity: 0; }
+  12%  { transform: translate(-1px, -2px)  rotate(-4deg) scale(0.85); opacity: 0.85; }
+  20%  { transform: translate(-1px, -4px)  rotate(-3deg) scale(1);    opacity: 1; }
+  50%  { transform: translate(-4px, -18px) rotate(-8deg) scale(1);    opacity: 1; }
+  75%  { transform: translate(-1px, -30px) rotate(-2deg) scale(1);    opacity: 0.95; }
+  82%  { transform: translate(-1px, -33px) rotate(-2deg) scale(1.05); opacity: 0.9; }
+  92%  { transform: translate(-1px, -34px) rotate(-2deg) scale(1.55); opacity: 0.5; }
+  100% { transform: translate(-1px, -34px) rotate(-2deg) scale(0.3);  opacity: 0; }
+}
+@keyframes mn-rise-R {
+  0%   { transform: translate(0, 0)       rotate(0deg) scale(0.2);  opacity: 0; }
+  12%  { transform: translate(1px, -2px)  rotate(4deg) scale(0.85); opacity: 0.85; }
+  20%  { transform: translate(1px, -4px)  rotate(3deg) scale(1);    opacity: 1; }
+  50%  { transform: translate(4px, -18px) rotate(8deg) scale(1);    opacity: 1; }
+  75%  { transform: translate(1px, -30px) rotate(2deg) scale(1);    opacity: 0.95; }
+  82%  { transform: translate(1px, -33px) rotate(2deg) scale(1.05); opacity: 0.9; }
+  92%  { transform: translate(1px, -34px) rotate(2deg) scale(1.55); opacity: 0.5; }
+  100% { transform: translate(1px, -34px) rotate(2deg) scale(0.3);  opacity: 0; }
+}
+@keyframes mn-rise-up {
+  0%   { transform: translate(0, 0)        rotate(0deg)  scale(0.2);  opacity: 0; }
+  12%  { transform: translate(1px, -2px)   rotate(2deg)  scale(0.85); opacity: 0.85; }
+  20%  { transform: translate(0, -4px)     rotate(0deg)  scale(1);    opacity: 1; }
+  50%  { transform: translate(-2px, -16px) rotate(-3deg) scale(1);    opacity: 1; }
+  75%  { transform: translate(2px, -28px)  rotate(3deg)  scale(1);    opacity: 0.95; }
+  82%  { transform: translate(2px, -30px)  rotate(2deg)  scale(1.05); opacity: 0.9; }
+  92%  { transform: translate(2px, -31px)  rotate(2deg)  scale(1.55); opacity: 0.5; }
+  100% { transform: translate(2px, -31px)  rotate(2deg)  scale(0.3);  opacity: 0; }
+}
+
+/* Burst rings — each one shares its sibling note's spawn coords so the
+   pop happens exactly where the note vanishes. */
+.mn-burst {
+  position: absolute;
+  width:  calc(var(--mn-note-size) + 4px);
+  height: calc(var(--mn-note-size) + 4px);
+  border-radius: 50%;
+  border: 1.2px solid var(--mn-note-color);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.2);
+  transform-origin: center;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-out;
+  animation-duration: var(--mn-duration);
+}
+.mn-r1 {
+  left:   calc(var(--mn-cluster-x) - var(--mn-h-spread) / 2);
+  bottom: calc(var(--mn-cluster-y) - var(--mn-v-spread) / 2);
+  animation-name: mn-burst-L; animation-delay: 0s;
+}
+.mn-r2 {
+  left:   calc(var(--mn-cluster-x) + var(--mn-h-spread) / 2);
+  bottom: calc(var(--mn-cluster-y) - var(--mn-v-spread) / 2);
+  animation-name: mn-burst-R; animation-delay: 0.5s;
+}
+.mn-r3 {
+  left:   calc(var(--mn-cluster-x) - var(--mn-h-spread) / 4);
+  bottom: calc(var(--mn-cluster-y) + var(--mn-v-spread) / 2);
+  animation-name: mn-burst-up; animation-delay: 1s;
+}
+.mn-r4 {
+  left:   calc(var(--mn-cluster-x) + var(--mn-h-spread) / 4);
+  bottom: calc(var(--mn-cluster-y) + var(--mn-v-spread) / 2);
+  animation-name: mn-burst-up; animation-delay: 1.5s;
+}
+
+@keyframes mn-burst-L {
+  0%, 82% { transform: translate(-1px, -33px) scale(0.2); opacity: 0; }
+  88%     { transform: translate(-1px, -34px) scale(1.0); opacity: 0.6; }
+  100%    { transform: translate(-1px, -34px) scale(1.8); opacity: 0; }
+}
+@keyframes mn-burst-R {
+  0%, 82% { transform: translate(1px, -33px) scale(0.2); opacity: 0; }
+  88%     { transform: translate(1px, -34px) scale(1.0); opacity: 0.6; }
+  100%    { transform: translate(1px, -34px) scale(1.8); opacity: 0; }
+}
+@keyframes mn-burst-up {
+  0%, 82% { transform: translate(2px, -30px) scale(0.2); opacity: 0; }
+  88%     { transform: translate(2px, -31px) scale(1.0); opacity: 0.6; }
+  100%    { transform: translate(2px, -31px) scale(1.8); opacity: 0; }
 }

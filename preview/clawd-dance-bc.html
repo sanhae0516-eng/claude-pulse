@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>Claw'd Dance — B+C Mix</title>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --card: rgba(22, 25, 32, 0.85);
+    --card-ref: rgba(22, 25, 32, 0.55);
+    --border: rgba(255, 255, 255, 0.08);
+    --text: rgba(255, 255, 255, 0.95);
+    --text-sub: rgba(255, 255, 255, 0.55);
+    --text-dim: rgba(255, 255, 255, 0.35);
+    --accent: #6ee7b7;
+    --speed: 1;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Pretendard Variable", "Pretendard", -apple-system, system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  body {
+    padding: 40px 32px;
+    background: radial-gradient(ellipse at top, #15181f 0%, #0a0c11 100%);
+  }
+  h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+  h2 {
+    font-size: 13px; font-weight: 600; margin: 36px 0 14px;
+    color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.12em;
+  }
+  .subtitle {
+    color: var(--text-sub);
+    font-size: 13px;
+    margin: 0 0 28px;
+    line-height: 1.5;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex; gap: 24px; align-items: center; flex-wrap: wrap;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 14px 18px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    backdrop-filter: blur(12px);
+  }
+  .control-group { display: flex; align-items: center; gap: 10px; }
+  .control-group label {
+    font-size: 12px; color: var(--text-sub); font-weight: 500; letter-spacing: 0.04em;
+  }
+  .speed-slider {
+    width: 160px; -webkit-appearance: none; appearance: none;
+    height: 3px; background: rgba(255, 255, 255, 0.12); border-radius: 2px; cursor: pointer;
+  }
+  .speed-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent); cursor: pointer;
+  }
+  .speed-value {
+    font-variant-numeric: tabular-nums;
+    min-width: 36px; color: var(--text); font-size: 13px; font-weight: 600;
+  }
+  .mood-buttons {
+    display: flex; gap: 4px; background: rgba(255, 255, 255, 0.04);
+    padding: 3px; border-radius: 6px;
+  }
+  .mood-btn {
+    background: transparent; border: none; color: var(--text-sub);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    padding: 5px 12px; border-radius: 4px; cursor: pointer;
+    text-transform: uppercase; transition: all 150ms;
+  }
+  .mood-btn.active {
+    background: rgba(255, 255, 255, 0.1); color: var(--text);
+  }
+  .eyes-toggle {
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer; user-select: none;
+    font-size: 12px; color: var(--text-sub);
+  }
+  .eyes-toggle input {
+    width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer;
+  }
+
+  /* Grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .grid.refs { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    backdrop-filter: blur(12px);
+  }
+  .card.ref {
+    background: var(--card-ref);
+    padding: 14px 16px;
+  }
+  .card.featured {
+    border: 1px solid rgba(110, 231, 183, 0.25);
+    box-shadow: 0 0 0 1px rgba(110, 231, 183, 0.1) inset;
+  }
+  .card-header {
+    display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;
+  }
+  .card-name { font-size: 16px; font-weight: 700; letter-spacing: 0.02em; }
+  .card.ref .card-name { font-size: 13px; }
+  .card-tag {
+    font-size: 10px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .card-desc {
+    color: var(--text-sub); font-size: 12px; margin: 0 0 18px; line-height: 1.5;
+  }
+  .card.ref .card-desc { font-size: 11px; margin-bottom: 12px; }
+
+  .stage {
+    display: flex; align-items: center; justify-content: center;
+    height: 140px;
+    background:
+      radial-gradient(ellipse at center, rgba(217, 117, 87, 0.06) 0%, transparent 60%),
+      rgba(0, 0, 0, 0.25);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .card.ref .stage { height: 100px; margin-bottom: 12px; }
+
+  /* Claw'd SVG base */
+  .claude-pet {
+    width: 110px;
+    height: auto;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));
+    animation-duration: calc(var(--base-dur, 1s) / var(--speed));
+    animation-iteration-count: infinite;
+    animation-timing-function: var(--ease, ease-in-out);
+  }
+  .card.ref .claude-pet { width: 80px; }
+
+  .pet-eye {
+    transform-origin: center;
+    transform-box: fill-box;
+  }
+  body.eyes-closed .pet-eye { transform: scaleY(0.1); }
+
+  /* ── B+C combinations ──────────────────────────────────────── */
+
+  /* BC-1: 매 비트마다 점프 + 좌우 기울임 + 약간 옆으로  */
+  .pet-BC1 {
+    --base-dur: 0.85s;
+    --ease: ease-in-out;
+    animation-name: dance-BC1;
+  }
+  @keyframes dance-BC1 {
+    0%, 100% { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+    25%      { transform: translate(-1.5px,-4px) rotate(-3deg) scaleY(0.94); }
+    50%      { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+    75%      { transform: translate(1.5px, -4px) rotate(3deg)  scaleY(0.94); }
+  }
+
+  /* BC-2: 강한 — 큰 점프 + 큰 기울임 (역동적) */
+  .pet-BC2 {
+    --base-dur: 0.75s;
+    --ease: cubic-bezier(0.4, 0, 0.6, 1);
+    animation-name: dance-BC2;
+  }
+  @keyframes dance-BC2 {
+    0%, 100% { transform: translate(0, 0)      rotate(0deg)  scaleY(1); }
+    25%      { transform: translate(-2px, -6px) rotate(-5deg) scaleY(0.9); }
+    50%      { transform: translate(0, 1px)                   scaleY(1.04); }
+    75%      { transform: translate(2px, -6px)  rotate(5deg)  scaleY(0.9); }
+  }
+
+  /* BC-3: 교대 — 한 박자 점프, 다음 박자 좌-스텝, 점프, 우-스텝 */
+  .pet-BC3 {
+    --base-dur: 1.4s;
+    --ease: ease-in-out;
+    animation-name: dance-BC3;
+  }
+  @keyframes dance-BC3 {
+    0%, 100% { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+    /* beat 1: 점프 */
+    20%      { transform: translate(0, -5px)     rotate(0deg)  scaleY(0.92); }
+    30%      { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+    /* beat 2: 좌-스텝 + 기울임 */
+    45%      { transform: translate(-2px, 0)     rotate(-3deg) scaleY(1); }
+    55%      { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+    /* beat 3: 점프 */
+    70%      { transform: translate(0, -5px)     rotate(0deg)  scaleY(0.92); }
+    80%      { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+    /* beat 4: 우-스텝 + 기울임 */
+    92%      { transform: translate(2px, 0)      rotate(3deg)  scaleY(1); }
+  }
+
+  /* ── Reference originals (for side-by-side) ───────────────── */
+
+  .pet-B {
+    --base-dur: 0.6s;
+    --ease: cubic-bezier(0.5, 0, 0.5, 1);
+    animation-name: dance-B;
+  }
+  @keyframes dance-B {
+    0%, 100% { transform: translateY(0) scaleY(1); }
+    40%      { transform: translateY(-5px) scaleY(0.92); }
+    50%      { transform: translateY(-5px) scaleY(0.92); }
+  }
+  .pet-C {
+    --base-dur: 0.7s;
+    --ease: ease-in-out;
+    animation-name: dance-C;
+  }
+  @keyframes dance-C {
+    0%, 100% { transform: translateX(0) rotate(0deg); }
+    25%      { transform: translateX(-1.5px) rotate(-3deg); }
+    50%      { transform: translateX(0) rotate(0deg); }
+    75%      { transform: translateX(1.5px) rotate(3deg); }
+  }
+
+  /* Code blocks */
+  .code {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.65);
+    line-height: 1.55;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code .keyword { color: #c4b5fd; }
+  .code .num     { color: #6ee7b7; }
+  .code .selector { color: #fda4af; }
+
+  .footer {
+    margin-top: 36px;
+    color: var(--text-dim);
+    font-size: 11px;
+    text-align: center;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body class="eyes-closed mood-happy">
+
+<h1>B + C Mix — Claw'd Dance</h1>
+<p class="subtitle">
+  점프 (B) 와 좌우 tilt (C) 를 다양한 방식으로 섞은 시안 3종. 아래 참조용 원본 B, C 와 같이 비교해보세요.
+</p>
+
+<div class="controls">
+  <div class="control-group">
+    <label>속도</label>
+    <input id="speed" class="speed-slider" type="range" min="0.5" max="2" step="0.1" value="1" />
+    <span id="speedVal" class="speed-value">1.0×</span>
+  </div>
+  <div class="control-group">
+    <label>색상</label>
+    <div class="mood-buttons">
+      <button class="mood-btn active" data-mood="happy">happy</button>
+      <button class="mood-btn" data-mood="worried">worried</button>
+      <button class="mood-btn" data-mood="alarm">alarm</button>
+    </div>
+  </div>
+  <label class="eyes-toggle">
+    <input id="eyesClosed" type="checkbox" checked />
+    눈 감기 (댄스 시)
+  </label>
+</div>
+
+<h2>B + C 조합 시안</h2>
+<div class="grid">
+
+  <!-- BC-1 -->
+  <div class="card featured">
+    <div class="card-header">
+      <span class="card-name">BC-1. 가벼운 점프 + tilt</span>
+      <span class="card-tag">0.85s</span>
+    </div>
+    <p class="card-desc">매 비트마다 살짝 점프하며 양옆으로 기울임. B 와 C 를 동시에 부드럽게 합친 시안.</p>
+    <div class="stage"><svg class="claude-pet pet-BC1" data-pet></svg></div>
+    <pre class="code"><span class="selector">@keyframes</span> <span class="keyword">dance-BC1</span> {
+  <span class="num">0%</span>, <span class="num">100%</span> { transform: translate(<span class="num">0</span>,<span class="num">0</span>) rotate(<span class="num">0deg</span>); }
+  <span class="num">25%</span>      { transform: translate(<span class="num">-1.5px</span>,<span class="num">-4px</span>) rotate(<span class="num">-3deg</span>) scaleY(<span class="num">.94</span>); }
+  <span class="num">50%</span>      { transform: translate(<span class="num">0</span>,<span class="num">0</span>) rotate(<span class="num">0deg</span>); }
+  <span class="num">75%</span>      { transform: translate(<span class="num">1.5px</span>,<span class="num">-4px</span>) rotate(<span class="num">3deg</span>) scaleY(<span class="num">.94</span>); }
+}</pre>
+  </div>
+
+  <!-- BC-2 -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-name">BC-2. 강한 점프 + tilt</span>
+      <span class="card-tag">0.75s</span>
+    </div>
+    <p class="card-desc">큰 점프 + 큰 기울임. 가운데로 떨어질 때 살짝 눌리는 squish 도 추가. 역동적인 톤.</p>
+    <div class="stage"><svg class="claude-pet pet-BC2" data-pet></svg></div>
+    <pre class="code"><span class="selector">@keyframes</span> <span class="keyword">dance-BC2</span> {
+  <span class="num">0%</span>, <span class="num">100%</span> { transform: translate(<span class="num">0</span>,<span class="num">0</span>) rotate(<span class="num">0deg</span>); }
+  <span class="num">25%</span>      { transform: translate(<span class="num">-2px</span>,<span class="num">-6px</span>) rotate(<span class="num">-5deg</span>) scaleY(<span class="num">.9</span>); }
+  <span class="num">50%</span>      { transform: translate(<span class="num">0</span>,<span class="num">1px</span>) scaleY(<span class="num">1.04</span>); }
+  <span class="num">75%</span>      { transform: translate(<span class="num">2px</span>,<span class="num">-6px</span>) rotate(<span class="num">5deg</span>) scaleY(<span class="num">.9</span>); }
+}</pre>
+  </div>
+
+  <!-- BC-3 -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-name">BC-3. 점프 ↔ 스텝 교대</span>
+      <span class="card-tag">1.4s</span>
+    </div>
+    <p class="card-desc">"점프 → 좌-스텝 → 점프 → 우-스텝" 4박자 패턴. 두 동작이 시간에 따라 교대.</p>
+    <div class="stage"><svg class="claude-pet pet-BC3" data-pet></svg></div>
+    <pre class="code"><span class="selector">@keyframes</span> <span class="keyword">dance-BC3</span> {
+  <span class="num">0%</span>, <span class="num">100%</span> { transform: translate(<span class="num">0</span>,<span class="num">0</span>) rotate(<span class="num">0deg</span>); }
+  <span class="num">20%</span>      { translateY(<span class="num">-5px</span>) scaleY(<span class="num">.92</span>); }  /* 점프 */
+  <span class="num">45%</span>      { translateX(<span class="num">-2px</span>) rotate(<span class="num">-3deg</span>); }    /* 좌-스텝 */
+  <span class="num">70%</span>      { translateY(<span class="num">-5px</span>) scaleY(<span class="num">.92</span>); }  /* 점프 */
+  <span class="num">92%</span>      { translateX(<span class="num">2px</span>) rotate(<span class="num">3deg</span>); }     /* 우-스텝 */
+}</pre>
+  </div>
+
+</div>
+
+<h2>참조용 — 원본 B & C</h2>
+<div class="grid refs">
+  <div class="card ref">
+    <div class="card-header">
+      <span class="card-name">B. 비트 점프</span>
+      <span class="card-tag">0.6s</span>
+    </div>
+    <p class="card-desc">위로만 통 튀기.</p>
+    <div class="stage"><svg class="claude-pet pet-B" data-pet></svg></div>
+  </div>
+  <div class="card ref">
+    <div class="card-header">
+      <span class="card-name">C. 두-스텝 tilt</span>
+      <span class="card-tag">0.7s</span>
+    </div>
+    <p class="card-desc">좌우로 + 살짝 기울임.</p>
+    <div class="stage"><svg class="claude-pet pet-C" data-pet></svg></div>
+  </div>
+</div>
+
+<p class="footer">
+  마음에 드시는 시안 (예: "BC-1 인데 좀 더 빠르게", "BC-2 가 좋아") 알려주시면 위젯에 적용합니다.<br>
+  세 시안 다 별로면 다른 방향 (예: "tilt 만, 점프 빼고") 도 알려주세요.
+</p>
+
+<script>
+  const COLORS = {
+    happy:   { body: "#D96A47", eye: "#000000" },
+    worried: { body: "#D85B2E", eye: "#000000" },
+    alarm:   { body: "#E64545", eye: "#FF3B30" },
+  };
+
+  function buildPetInto(svg, mood) {
+    const c = COLORS[mood];
+    svg.setAttribute("viewBox", "0 0 20 13");
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    svg.setAttribute("shape-rendering", "crispEdges");
+    svg.innerHTML = `
+      <rect x="5" y="2" width="10" height="3" fill="${c.body}" />
+      <rect x="3" y="5" width="14" height="3" fill="${c.body}" />
+      <rect x="5" y="8" width="10" height="2" fill="${c.body}" />
+      <g class="pet-legs">
+        <rect x="5"    y="10" width="1.5" height="2.5" fill="${c.body}" />
+        <rect x="7.75" y="10" width="1.5" height="2.5" fill="${c.body}" />
+        <rect x="11"   y="10" width="1.5" height="2.5" fill="${c.body}" />
+        <rect x="13.5" y="10" width="1.5" height="2.5" fill="${c.body}" />
+      </g>
+      <rect class="pet-eye" x="6.5"   y="3.5" width="1.25" height="1.25" fill="${c.eye}" />
+      <rect class="pet-eye" x="12.25" y="3.5" width="1.25" height="1.25" fill="${c.eye}" />
+    `;
+  }
+  function repaintAll(mood) {
+    document.querySelectorAll("[data-pet]").forEach((svg) => buildPetInto(svg, mood));
+  }
+
+  const speedEl = document.getElementById("speed");
+  const speedVal = document.getElementById("speedVal");
+  speedEl.addEventListener("input", () => {
+    const v = parseFloat(speedEl.value);
+    document.documentElement.style.setProperty("--speed", v);
+    speedVal.textContent = v.toFixed(1) + "×";
+  });
+
+  let currentMood = "happy";
+  document.querySelectorAll(".mood-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".mood-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentMood = btn.dataset.mood;
+      repaintAll(currentMood);
+    });
+  });
+
+  const eyesEl = document.getElementById("eyesClosed");
+  eyesEl.addEventListener("change", () => {
+    document.body.classList.toggle("eyes-closed", eyesEl.checked);
+  });
+
+  repaintAll(currentMood);
+</script>
+
+</body>
+</html>

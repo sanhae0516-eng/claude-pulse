@@ -8,29 +8,33 @@ function easeOutCubic(t: number): number {
 }
 
 /**
- * Smoothly resize the Tauri window to `targetSize` whenever the target
- * changes. Uses requestAnimationFrame with eased interpolation so dragging
- * the size slider feels fluid instead of snapping in discrete jumps.
+ * Smoothly resize the Tauri window to `(targetWidth, targetHeight)` whenever
+ * either changes. Eased interpolation via rAF so dragging the size slider —
+ * or expanding the music player — feels fluid instead of snapping.
  *
- * Cancels any in-flight animation when the target changes mid-flight,
- * so rapid slider movement always chases the latest value.
+ * Width and height are interpolated independently in a single frame loop, so
+ * "width stays, height grows" (music player expansion) animates correctly
+ * without double-loops.
  */
-export function useApplyWindowSize(targetSize: number) {
-  const currentSizeRef = useRef<number>(targetSize);
+export function useApplyWindowSize(targetWidth: number, targetHeight: number) {
+  const currentRef = useRef<{ w: number; h: number }>({
+    w: targetWidth,
+    h: targetHeight,
+  });
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!inTauri()) {
-      currentSizeRef.current = targetSize;
+      currentRef.current = { w: targetWidth, h: targetHeight };
       return;
     }
 
-    const startSize = currentSizeRef.current;
+    const startW = currentRef.current.w;
+    const startH = currentRef.current.h;
     const startTime = performance.now();
     let cancelled = false;
-    let modules: { setSize: (s: number) => Promise<void> } | null = null;
+    let modules: { setSize: (w: number, h: number) => Promise<void> } | null = null;
 
-    // Preload the Tauri APIs once.
     (async () => {
       const [{ getCurrentWebviewWindow }, { LogicalSize }] = await Promise.all([
         import("@tauri-apps/api/webviewWindow"),
@@ -38,7 +42,7 @@ export function useApplyWindowSize(targetSize: number) {
       ]);
       const win = getCurrentWebviewWindow();
       modules = {
-        setSize: (s: number) => win.setSize(new LogicalSize(s, s)),
+        setSize: (w: number, h: number) => win.setSize(new LogicalSize(w, h)),
       };
     })();
 
@@ -46,10 +50,11 @@ export function useApplyWindowSize(targetSize: number) {
       if (cancelled) return;
       const t = Math.min(1, (now - startTime) / ANIMATION_MS);
       const eased = easeOutCubic(t);
-      const size = Math.round(startSize + (targetSize - startSize) * eased);
-      if (size !== currentSizeRef.current) {
-        currentSizeRef.current = size;
-        modules?.setSize(size).catch(() => {/* swallow transient resize errors */});
+      const w = Math.round(startW + (targetWidth - startW) * eased);
+      const h = Math.round(startH + (targetHeight - startH) * eased);
+      if (w !== currentRef.current.w || h !== currentRef.current.h) {
+        currentRef.current = { w, h };
+        modules?.setSize(w, h).catch(() => {/* swallow transient resize errors */});
       }
       if (t < 1) {
         rafRef.current = requestAnimationFrame(step);
@@ -62,5 +67,5 @@ export function useApplyWindowSize(targetSize: number) {
       cancelled = true;
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [targetSize]);
+  }, [targetWidth, targetHeight]);
 }

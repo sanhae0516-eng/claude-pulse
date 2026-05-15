@@ -1,0 +1,733 @@
+/* ════════════════════════════════════════════════════════════════
+   Music window root — the top-level container rendered into the
+   separate `music` Tauri window. Fills the whole window and hosts
+   the MiniPlayer inside.
+   ════════════════════════════════════════════════════════════════ */
+
+body.window-music,
+body.window-music html,
+.music-window-root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+.music-window-root {
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  overflow: hidden;
+  /* Subtle entrance slide — opacity is intentionally NOT animated because we
+     drive it from inline style synced with main widget settings, and a
+     `to { opacity: 1 }` rule would lock it to 1 once the animation
+     completed (fill-mode both), overriding the inline value. */
+  animation: music-window-in 180ms var(--ease-default) both;
+}
+
+@keyframes music-window-in {
+  from { transform: translateY(-4px); }
+  to   { transform: translateY(0); }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Mini-player — compact rectangular box. Used inside the second
+   Tauri window via `<MusicWindow>` → `<MiniPlayer>`.
+   ════════════════════════════════════════════════════════════════ */
+
+.mini-player {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Distribute the 3 content rows evenly so we never end up with a fat empty
+     strip at the bottom regardless of window height tweaks. */
+  justify-content: space-around;
+  padding: 6px 12px;
+  background: var(--surface-base);
+  backdrop-filter: blur(var(--blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* ── Meta line (title + sub + close) ─────────────────────────────── */
+
+.mini-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mini-title {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-sub {
+  font-size: 9px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 35%;
+}
+
+.mini-close {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1;
+  margin-left: auto;
+}
+
+.mini-close:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Progress ───────────────────────────────────────────────────── */
+
+.mini-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-progress-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2.5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.mini-progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  cursor: pointer;
+}
+
+.mini-progress-slider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mini-time {
+  font-size: 8.5px;
+  color: var(--text-tertiary);
+  min-width: 58px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Controls row (transport + folder + volume) ─────────────────── */
+
+.mini-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mini-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 150ms var(--ease-default), background 150ms var(--ease-default);
+  flex-shrink: 0;
+}
+
+.mini-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mini-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.mini-btn-play {
+  width: 26px;
+  height: 26px;
+  color: var(--text-primary);
+}
+
+.mini-btn-play:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mini-btn-list {
+  margin-left: 4px;
+  color: var(--text-tertiary);
+}
+
+.mini-volume {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+}
+
+.mini-volume-slider {
+  width: 50px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2.5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.mini-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* ── Empty state (no files yet, or scanning) ────────────────────── */
+/* Stack the prompt + button vertically and center them, instead of the old
+   row layout that left a giant gap on one side. Close button floats. */
+
+.mini-empty {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.mini-empty .mini-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin-left: 0;
+}
+
+.mini-empty-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.mini-folder-btn {
+  padding: 6px 14px;
+  border: 1px solid rgba(110, 231, 183, 0.4);
+  background: rgba(110, 231, 183, 0.12);
+  color: #6ee7b7;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 150ms var(--ease-default);
+}
+
+.mini-folder-btn:hover {
+  background: rgba(110, 231, 183, 0.2);
+}
+
+/* ── Equalizer (playing indicator) ──────────────────────────────── */
+
+.mini-equalizer {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 11px;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.mini-equalizer span {
+  display: block;
+  width: 2px;
+  height: 100%;
+  background: #6ee7b7;
+  border-radius: 1px;
+  transform-origin: bottom;
+  animation: eq-bounce 0.9s var(--ease-default) infinite;
+}
+
+.mini-equalizer span:nth-child(1) { animation-delay:  0.00s; }
+.mini-equalizer span:nth-child(2) { animation-delay:  0.18s; }
+.mini-equalizer span:nth-child(3) { animation-delay:  0.36s; }
+.mini-equalizer span:nth-child(4) { animation-delay:  0.10s; }
+
+@keyframes eq-bounce {
+  0%, 100% { transform: scaleY(0.25); }
+  50%      { transform: scaleY(1); }
+}
+
+/* Tighten controls when the widget is narrow */
+@media (max-width: 200px) {
+  .mini-sub {
+    display: none;
+  }
+  .mini-volume-slider {
+    width: 35px;
+  }
+  .mini-time {
+    min-width: 48px;
+    font-size: 8px;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Legacy overlay panel styles (MusicPanel.tsx) — kept for now in
+   case we want to bring the full-panel mode back as an option, but
+   not currently rendered. Tree-shaken from the build either way.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Music panel — overlay inside the widget shell, mirrors settings.css. */
+
+.music-panel {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  background: rgba(15, 17, 23, 0.98);
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 0;
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+
+.music-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.music-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--text-tertiary);
+}
+
+.music-close {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.music-close:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Body ───────────────────────────────────────────────────────── */
+
+.music-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Now Playing ────────────────────────────────────────────────── */
+
+.music-now-playing {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.music-now-empty .music-now-title {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.music-now-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.music-now-sub {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Controls ───────────────────────────────────────────────────── */
+
+.music-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.music-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.music-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 5px;
+  transition: color 150ms var(--ease-default), background 150ms var(--ease-default);
+}
+
+.music-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.music-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.music-btn-play {
+  width: 30px;
+  height: 30px;
+  color: var(--text-primary);
+}
+
+.music-btn-play:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.music-volume {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-tertiary);
+}
+
+.music-volume-slider {
+  width: 60px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.music-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* ── Progress ───────────────────────────────────────────────────── */
+
+.music-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.music-progress-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.music-progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  cursor: pointer;
+}
+
+.music-progress-slider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.music-time {
+  font-size: 9px;
+  color: var(--text-tertiary);
+  min-width: 70px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Track list ─────────────────────────────────────────────────── */
+
+.music-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  min-height: 0;
+}
+
+.music-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.music-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+.music-list-status {
+  padding: 16px 8px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.music-list-error {
+  color: #f87171;
+}
+
+.music-list-skipped {
+  font-size: 9px;
+  padding: 6px 8px 0;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+  margin-top: 4px;
+}
+
+.music-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 100ms var(--ease-default), color 100ms var(--ease-default);
+  width: 100%;
+}
+
+.music-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.music-row.is-current {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.music-row-indicator {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.music-row.is-current .music-row-indicator {
+  color: #6ee7b7;
+}
+
+.music-row-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.music-row-artist {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.music-row-duration {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+/* ── Empty state (no folder) ────────────────────────────────────── */
+
+.music-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+}
+
+.music-empty-icon {
+  font-size: 32px;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+
+.music-empty-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.music-empty-hint {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  max-width: 220px;
+}
+
+.music-btn-cta {
+  margin-top: 8px;
+  padding: 8px 16px;
+  border: 1px solid rgba(110, 231, 183, 0.4);
+  background: rgba(110, 231, 183, 0.12);
+  color: #6ee7b7;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  letter-spacing: 0.04em;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 150ms var(--ease-default), border-color 150ms;
+}
+
+.music-btn-cta:hover {
+  background: rgba(110, 231, 183, 0.2);
+  border-color: rgba(110, 231, 183, 0.6);
+}
+
+/* ── Footer ─────────────────────────────────────────────────────── */
+
+.music-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.music-footer-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-family: var(--font-sans);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 150ms var(--ease-default);
+}
+
+.music-footer-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.music-footer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.music-footer-toggle input {
+  width: 11px;
+  height: 11px;
+  accent-color: #6ee7b7;
+  cursor: pointer;
+}
+
+/* Compact mode for small widget sizes */
+@container pulse (max-width: 200px) {
+  .music-row-artist {
+    display: none;
+  }
+  .music-now-sub {
+    font-size: 9px;
+  }
+  .music-volume-slider {
+    width: 40px;
+  }
+}

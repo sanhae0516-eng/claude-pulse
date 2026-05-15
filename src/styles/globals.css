@@ -1,6 +1,12 @@
 :root {
   /* Surface */
   --surface-base: rgba(12, 14, 18, 0.72);
+  /* Widget-only background. The main widget has dense content (rings, large
+     percentage, character, week label) which perceptually darkens the entire
+     surface compared to the sparse music window. Lowering the alpha here
+     restores the same glass-translucent feel. Music window keeps the heavier
+     0.72 since its content layer is light. */
+  --surface-widget: rgba(12, 14, 18, 0.58);
   --surface-raised: rgba(22, 25, 32, 0.78);
   --surface-overlay: rgba(34, 38, 48, 0.85);
   --blur: 24px;

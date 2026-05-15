@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { inTauri } from "./tauri";
 
 export type ColorScheme = "claude" | "mint" | "blue" | "violet" | "rose" | "custom";
 
@@ -89,12 +90,45 @@ function save(s: Settings) {
   }
 }
 
-/** Hook returns [settings, patch]. patch accepts a partial to merge in. */
+const TAURI_SETTINGS_EVENT = "settings:changed";
+
+/** Hook returns [settings, patch]. Cross-window sync uses Tauri's event
+ *  system because the browser `storage` event isn't reliable across separate
+ *  Tauri webviews. On every patch we broadcast the new settings; listeners
+ *  in *other* windows pick it up and update their local copy. localStorage
+ *  remains the source of truth on cold start. */
 export function useSettings(): [Settings, (p: Partial<Settings>) => void] {
   const [settings, setSettings] = useState<Settings>(() => load());
   useEffect(() => save(settings), [settings]);
-  const patch = (p: Partial<Settings>) =>
-    setSettings((prev) => ({ ...prev, ...p }));
+
+  // Cross-window: receive updates emitted by other windows.
+  useEffect(() => {
+    if (!inTauri()) return;
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<Settings>(TAURI_SETTINGS_EVENT, (e) => {
+        setSettings(e.payload);
+      });
+    })();
+    return () => unlisten?.();
+  }, []);
+
+  const patch = (p: Partial<Settings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...p };
+      // Broadcast asynchronously — every webview (including this one) listens,
+      // but receiving our own emit and calling setSettings with the same shape
+      // is a no-op (React bails on referential changes from inside a setter).
+      if (inTauri()) {
+        void (async () => {
+          const { emit } = await import("@tauri-apps/api/event");
+          await emit(TAURI_SETTINGS_EVENT, next);
+        })();
+      }
+      return next;
+    });
+  };
   return [settings, patch];
 }
 

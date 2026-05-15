@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>Claw'd Dance — Widget-scale playground</title>
+<style>
+  /* ───────────────────────────────────────────────────────────
+     Galmuri11 — same pixel font the widget uses (loaded from the
+     real public/fonts folder so the demo and the widget render
+     identically). The relative path assumes this file lives at
+     preview/clawd-dance-final.html and that ../public/fonts/
+     contains Galmuri11.woff2 + .ttf.
+     ─────────────────────────────────────────────────────────── */
+  @font-face {
+    font-family: "Galmuri11";
+    src:
+      url("../public/fonts/Galmuri11.woff2") format("woff2"),
+      url("../public/fonts/Galmuri11.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  :root {
+    --bg: #0d0f14;
+    --card: rgba(22, 25, 32, 0.85);
+    --border: rgba(255, 255, 255, 0.08);
+    --text: rgba(255, 255, 255, 0.95);
+    --text-sub: rgba(255, 255, 255, 0.55);
+    --text-dim: rgba(255, 255, 255, 0.35);
+    --accent: #6ee7b7;
+    --surface-base: rgba(12, 14, 18, 0.72);
+    --blur: 24px;
+    --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+    --font-pixel: "Galmuri11", "Pretendard", system-ui, sans-serif;
+    --font-sans: "Pretendard Variable", "Pretendard", -apple-system, system-ui, sans-serif;
+
+    /* All user-adjustable values live here so the JS sliders only
+       have to write to one place. */
+    --widget-size: 220px;
+    --speed: 1;
+    --cluster-x: 50%;     /* horizontal center of the note cloud */
+    --cluster-y: 62%;     /* bottom% — vertical center of the cloud */
+    --h-spread: 10%;      /* note 1<->2 (and 3<->4) horizontal distance */
+    --v-spread: 7%;       /* shoulder pair <-> head pair vertical distance */
+    --note-size: 14px;
+    --bubble-text: "";    /* set by JS bubble pill */
+    --note-color: #D96A47;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+  }
+  body {
+    padding: 32px;
+    background: radial-gradient(ellipse at top, #15181f 0%, #0a0c11 100%);
+  }
+  h1 { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+  .subtitle {
+    color: var(--text-sub);
+    font-size: 12.5px;
+    margin: 0 0 24px;
+    line-height: 1.5;
+  }
+
+  /* Mood / note color hooks */
+  body.mood-worried { --note-color: #D85B2E; }
+  body.mood-alarm   { --note-color: #E64545; }
+  body.notes-white  { --note-color: rgba(255, 255, 255, 0.92); }
+  body.notes-mint   { --note-color: #6ee7b7; }
+
+  /* ── Layout: left panel = controls, right = widget preview ── */
+
+  .workbench {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    .workbench { grid-template-columns: 1fr; }
+  }
+
+  /* ── Controls panel ───────────────────────────────────────── */
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    backdrop-filter: blur(12px);
+  }
+  .panel h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-sub);
+    margin: 0 0 12px;
+  }
+  .panel h2:not(:first-of-type) { margin-top: 22px; }
+
+  .field {
+    display: grid;
+    grid-template-columns: 78px 1fr 42px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .field label {
+    font-size: 11.5px;
+    color: var(--text-sub);
+  }
+  .field input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .field input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+  .field .v {
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    color: var(--text);
+    text-align: right;
+  }
+
+  .pill-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .pill-row > .label-text {
+    width: 78px;
+    font-size: 11.5px;
+    color: var(--text-sub);
+  }
+  .pill-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 3px;
+    border-radius: 6px;
+    flex: 1;
+  }
+  .pill-btn {
+    background: transparent; border: none; color: var(--text-sub);
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em;
+    padding: 4px 9px; border-radius: 4px; cursor: pointer;
+    text-transform: uppercase; transition: all 150ms;
+  }
+  .pill-btn.active {
+    background: rgba(255, 255, 255, 0.1); color: var(--text);
+  }
+
+  .check-row {
+    display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  .check-row label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11.5px; color: var(--text-sub); cursor: pointer; user-select: none;
+  }
+  .check-row input { accent-color: var(--accent); cursor: pointer; }
+
+  /* ── Widget preview stage ─────────────────────────────────── */
+  /* Mirrors the production widget shell: container-type:size, the same
+     background, blur, border, border-radius, and the same flex-center
+     character placement. Sized by the --widget-size variable. */
+
+  .widget-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+  .widget-stage-meta {
+    color: var(--text-dim);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .widget {
+    position: relative;
+    width: var(--widget-size);
+    height: var(--widget-size);
+    border-radius: 24px;
+    background: var(--surface-base);
+    backdrop-filter: blur(var(--blur)) saturate(160%);
+    border: 1px solid var(--border);
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    container-type: size;
+    container-name: pulse;
+  }
+
+  /* ── Real widget layout simulation ────────────────────────── */
+  /* These rules mirror `src/styles/widget.css` 1:1 (`.widget-center`,
+     `.widget-pct`, `.widget-remaining`, `.widget-week`) so the character's
+     vertical position inside the widget matches the actual widget exactly.
+     This is what makes the note coordinates portable: whatever cluster X/Y
+     산해님 dials in here lands at the same on-screen position when the
+     widget renders. */
+
+  .widget-center-sim {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(2px, 1cqmin, 6px);
+    width: 62%;
+    height: 70%;
+  }
+  .widget-pct-sim {
+    font-size: clamp(20px, 22cqmin, 72px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: baseline;
+    font-variant-numeric: tabular-nums;
+    color: #C7503A;
+  }
+  .widget-pct-sym {
+    font-size: 0.55em;
+    font-weight: 600;
+    margin-left: 2px;
+    opacity: 0.75;
+  }
+  .widget-remaining-sim {
+    font-size: clamp(10px, 7cqmin, 24px);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: clamp(0px, 0.5cqmin, 4px);
+    font-variant-numeric: tabular-nums;
+  }
+  .widget-week-sim {
+    font-size: clamp(8px, 5cqmin, 12px);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: clamp(2px, 1cqmin, 6px);
+    text-transform: lowercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Claw'd ───────────────────────────────────────────────── */
+  /* Same clamp() as the real widget — character scales with widget size. */
+  .claude-pet-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 3;
+  }
+  .claude-pet {
+    width: clamp(22px, 16cqmin, 40px);
+    height: auto;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+    animation-duration: calc(0.85s / var(--speed));
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+    animation-name: dance-BC1;
+  }
+  .pet-eye {
+    transform-origin: center;
+    transform-box: fill-box;
+  }
+  body.eyes-closed .pet-eye { transform: scaleY(0.1); }
+
+  @keyframes dance-BC1 {
+    0%, 100% { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+    25%      { transform: translate(-1.5px,-4px) rotate(-3deg) scaleY(0.94); }
+    50%      { transform: translate(0, 0)        rotate(0deg)  scaleY(1); }
+    75%      { transform: translate(1.5px, -4px) rotate(3deg)  scaleY(0.94); }
+  }
+
+  /* ── Speech bubble (real widget rule) ─────────────────────── */
+  /* Copied 1:1 from src/styles/widget.css with the same clamp() font size
+     and the same pixel font. Demo-only addition: `display: none` until a
+     bubble pill is chosen. */
+  .speech-bubble {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: min(90cqmin, 180px);
+    padding: 4px 9px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #1a1a1a;
+    font-family: var(--font-pixel);
+    font-size: clamp(9px, 5cqmin, 12px);
+    font-weight: 400;
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+    z-index: 20;
+    text-align: center;
+    word-break: keep-all;
+    line-height: 1.3;
+    letter-spacing: 0;
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: grayscale;
+    display: none;
+  }
+  .speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid rgba(255, 255, 255, 0.96);
+  }
+  body.bubble-on .speech-bubble { display: inline-block; }
+
+  /* ── Notes ───────────────────────────────────────────────── */
+  /* Coordinates pull from CSS variables so the sliders can re-aim the
+     cluster in real time. n1/n2 sit on the "shoulder pair" line, n3/n4
+     on the "head pair" line, separated by --v-spread. The pair offset
+     within each line is --h-spread. */
+
+  .notes-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+  body.notes-off .notes-layer { display: none; }
+
+  .note {
+    position: absolute;
+    width: var(--note-size);
+    height: auto;
+    color: var(--note-color);
+    opacity: 0;
+    filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.25));
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
+    animation-duration: calc(2.0s / var(--speed));
+    transform-origin: center;
+  }
+  /* Shoulder pair (lower row) */
+  .note.n1 {
+    left:   calc(var(--cluster-x) - var(--h-spread) / 2);
+    bottom: calc(var(--cluster-y) - var(--v-spread) / 2);
+    animation-name: bubble-rise-L;
+    animation-delay: 0.00s;
+  }
+  .note.n2 {
+    left:   calc(var(--cluster-x) + var(--h-spread) / 2);
+    bottom: calc(var(--cluster-y) - var(--v-spread) / 2);
+    animation-name: bubble-rise-R;
+    animation-delay: 0.50s;
+  }
+  /* Head pair (upper row) */
+  .note.n3 {
+    left:   calc(var(--cluster-x) - var(--h-spread) / 4);
+    bottom: calc(var(--cluster-y) + var(--v-spread) / 2);
+    animation-name: bubble-rise-up;
+    animation-delay: 1.00s;
+  }
+  .note.n4 {
+    left:   calc(var(--cluster-x) + var(--h-spread) / 4);
+    bottom: calc(var(--cluster-y) + var(--v-spread) / 2);
+    animation-name: bubble-rise-up;
+    animation-delay: 1.50s;
+  }
+
+  body.notes-sparse .note.n3,
+  body.notes-sparse .note.n4 { display: none; }
+
+  /* ── Bubble rise + burst (unchanged from previous demo) ──── */
+  @keyframes bubble-rise-L {
+    0%   { transform: translate(0, 0)        rotate(0deg)  scale(0.2); opacity: 0; }
+    12%  { transform: translate(-1px, -2px)  rotate(-4deg) scale(0.85); opacity: 0.85; }
+    20%  { transform: translate(-1px, -4px)  rotate(-3deg) scale(1);    opacity: 1; }
+    50%  { transform: translate(-4px, -18px) rotate(-8deg) scale(1);   opacity: 1; }
+    75%  { transform: translate(-1px, -30px) rotate(-2deg) scale(1);   opacity: 0.95; }
+    82%  { transform: translate(-1px, -33px) rotate(-2deg) scale(1.05); opacity: 0.9; }
+    92%  { transform: translate(-1px, -34px) rotate(-2deg) scale(1.55); opacity: 0.5; }
+    100% { transform: translate(-1px, -34px) rotate(-2deg) scale(0.3);  opacity: 0; }
+  }
+  @keyframes bubble-rise-R {
+    0%   { transform: translate(0, 0)       rotate(0deg) scale(0.2); opacity: 0; }
+    12%  { transform: translate(1px, -2px)  rotate(4deg) scale(0.85); opacity: 0.85; }
+    20%  { transform: translate(1px, -4px)  rotate(3deg) scale(1);    opacity: 1; }
+    50%  { transform: translate(4px, -18px) rotate(8deg) scale(1);   opacity: 1; }
+    75%  { transform: translate(1px, -30px) rotate(2deg) scale(1);   opacity: 0.95; }
+    82%  { transform: translate(1px, -33px) rotate(2deg) scale(1.05); opacity: 0.9; }
+    92%  { transform: translate(1px, -34px) rotate(2deg) scale(1.55); opacity: 0.5; }
+    100% { transform: translate(1px, -34px) rotate(2deg) scale(0.3);  opacity: 0; }
+  }
+  @keyframes bubble-rise-up {
+    0%   { transform: translate(0, 0)      rotate(0deg) scale(0.2); opacity: 0; }
+    12%  { transform: translate(1px, -2px) rotate(2deg) scale(0.85); opacity: 0.85; }
+    20%  { transform: translate(0, -4px)   rotate(0deg) scale(1);    opacity: 1; }
+    50%  { transform: translate(-2px, -16px) rotate(-3deg) scale(1); opacity: 1; }
+    75%  { transform: translate(2px, -28px)  rotate(3deg) scale(1);  opacity: 0.95; }
+    82%  { transform: translate(2px, -30px)  rotate(2deg) scale(1.05); opacity: 0.9; }
+    92%  { transform: translate(2px, -31px)  rotate(2deg) scale(1.55); opacity: 0.5; }
+    100% { transform: translate(2px, -31px)  rotate(2deg) scale(0.3);  opacity: 0; }
+  }
+
+  /* Burst rings — sized off --note-size with a small additive bump */
+  .burst-ring {
+    position: absolute;
+    width:  calc(var(--note-size) + 6px);
+    height: calc(var(--note-size) + 6px);
+    border-radius: 50%;
+    border: 1.5px solid var(--note-color);
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0.2);
+    transform-origin: center;
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-out;
+    animation-duration: calc(2.0s / var(--speed));
+  }
+  .burst-ring.r1 {
+    left:   calc(var(--cluster-x) - var(--h-spread) / 2);
+    bottom: calc(var(--cluster-y) - var(--v-spread) / 2);
+    animation-name: burst-pop-L; animation-delay: 0.00s;
+  }
+  .burst-ring.r2 {
+    left:   calc(var(--cluster-x) + var(--h-spread) / 2);
+    bottom: calc(var(--cluster-y) - var(--v-spread) / 2);
+    animation-name: burst-pop-R; animation-delay: 0.50s;
+  }
+  .burst-ring.r3 {
+    left:   calc(var(--cluster-x) - var(--h-spread) / 4);
+    bottom: calc(var(--cluster-y) + var(--v-spread) / 2);
+    animation-name: burst-pop-up; animation-delay: 1.00s;
+  }
+  .burst-ring.r4 {
+    left:   calc(var(--cluster-x) + var(--h-spread) / 4);
+    bottom: calc(var(--cluster-y) + var(--v-spread) / 2);
+    animation-name: burst-pop-up; animation-delay: 1.50s;
+  }
+  body.notes-off .burst-ring,
+  body.no-burst-ring .burst-ring { display: none; }
+  body.notes-sparse .burst-ring.r3,
+  body.notes-sparse .burst-ring.r4 { display: none; }
+
+  @keyframes burst-pop-L {
+    0%, 82% { transform: translate(-1px, -33px) scale(0.2); opacity: 0; }
+    88%     { transform: translate(-1px, -34px) scale(1.0); opacity: 0.6; }
+    100%    { transform: translate(-1px, -34px) scale(1.8); opacity: 0; }
+  }
+  @keyframes burst-pop-R {
+    0%, 82% { transform: translate(1px, -33px) scale(0.2); opacity: 0; }
+    88%     { transform: translate(1px, -34px) scale(1.0); opacity: 0.6; }
+    100%    { transform: translate(1px, -34px) scale(1.8); opacity: 0; }
+  }
+  @keyframes burst-pop-up {
+    0%, 82% { transform: translate(2px, -30px) scale(0.2); opacity: 0; }
+    88%     { transform: translate(2px, -31px) scale(1.0); opacity: 0.6; }
+    100%    { transform: translate(2px, -31px) scale(1.8); opacity: 0; }
+  }
+
+  /* Overlap modes */
+  body.notes-front .notes-layer { z-index: 25; }
+  body.notes-dim.bubble-on .notes-layer {
+    opacity: 0.25;
+    transition: opacity 200ms var(--ease-default);
+  }
+
+  /* Debug guide: outline cluster area so positions are visible while
+     dragging sliders. Toggled by a checkbox. */
+  body.show-guide .widget::before {
+    content: '';
+    position: absolute;
+    /* Rectangle covering the cluster spread region */
+    left:   calc(var(--cluster-x) - var(--h-spread) / 2 - var(--note-size) / 2);
+    bottom: calc(var(--cluster-y) - var(--v-spread) / 2 - var(--note-size) / 2);
+    width:  calc(var(--h-spread) + var(--note-size));
+    height: calc(var(--v-spread) + var(--note-size));
+    border: 1px dashed rgba(110, 231, 183, 0.4);
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 4;
+  }
+  body.show-guide .widget::after {
+    content: '';
+    position: absolute;
+    /* center crosshair at cluster anchor */
+    left: calc(var(--cluster-x) - 3px);
+    bottom: calc(var(--cluster-y) - 3px);
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: rgba(110, 231, 183, 0.6);
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .footer {
+    margin-top: 32px;
+    color: var(--text-dim);
+    font-size: 11px;
+    text-align: center;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body class="eyes-closed mood-happy">
+
+<h1>Widget-scale Playground</h1>
+<p class="subtitle">
+  좌측 컨트롤로 위젯 크기·음표 위치·말풍선을 조작하고, 우측 위젯에서 실제 적용 결과를 확인하세요.<br>
+  말풍선 폰트는 위젯과 동일한 <code style="color:#fcd34d">Galmuri11</code> 픽셀 폰트, 캐릭터와 글자 크기는 위젯 크기에 비례합니다.
+</p>
+
+<div class="workbench">
+
+  <!-- ── Controls ─────────────────────────────────────────── -->
+  <div class="panel">
+    <h2>위젯 크기</h2>
+    <div class="field">
+      <label>너비/높이</label>
+      <input id="widgetSize" type="range" min="160" max="360" step="5" value="220" />
+      <span class="v" id="widgetSizeVal">220px</span>
+    </div>
+
+    <h2>음표 위치 (위젯 % 기준)</h2>
+    <div class="field">
+      <label>중심 X</label>
+      <input id="clusterX" type="range" min="20" max="80" step="1" value="50" />
+      <span class="v" id="clusterXVal">50%</span>
+    </div>
+    <div class="field">
+      <label>중심 Y</label>
+      <input id="clusterY" type="range" min="20" max="90" step="1" value="62" />
+      <span class="v" id="clusterYVal">62%</span>
+    </div>
+    <div class="field">
+      <label>가로 폭</label>
+      <input id="hSpread" type="range" min="0" max="40" step="1" value="10" />
+      <span class="v" id="hSpreadVal">10%</span>
+    </div>
+    <div class="field">
+      <label>세로 폭</label>
+      <input id="vSpread" type="range" min="0" max="30" step="1" value="7" />
+      <span class="v" id="vSpreadVal">7%</span>
+    </div>
+    <div class="field">
+      <label>음표 크기</label>
+      <input id="noteSize" type="range" min="6" max="24" step="1" value="14" />
+      <span class="v" id="noteSizeVal">14px</span>
+    </div>
+    <div class="field">
+      <label>속도</label>
+      <input id="speed" type="range" min="0.5" max="2" step="0.1" value="1" />
+      <span class="v" id="speedVal">1.0×</span>
+    </div>
+
+    <h2>모양·색</h2>
+    <div class="pill-row">
+      <span class="label-text">캐릭터</span>
+      <div class="pill-buttons" id="moodPills">
+        <button class="pill-btn active" data-mood="happy">happy</button>
+        <button class="pill-btn" data-mood="worried">worried</button>
+        <button class="pill-btn" data-mood="alarm">alarm</button>
+      </div>
+    </div>
+    <div class="pill-row">
+      <span class="label-text">음표 색</span>
+      <div class="pill-buttons" id="notePills">
+        <button class="pill-btn active" data-note-color="body">캐릭터</button>
+        <button class="pill-btn" data-note-color="white">흰색</button>
+        <button class="pill-btn" data-note-color="mint">민트</button>
+      </div>
+    </div>
+    <div class="pill-row">
+      <span class="label-text">음표 강도</span>
+      <div class="pill-buttons" id="densityPills">
+        <button class="pill-btn" data-density="off">없음</button>
+        <button class="pill-btn" data-density="sparse">2개</button>
+        <button class="pill-btn active" data-density="full">4개</button>
+      </div>
+    </div>
+
+    <h2>말풍선 (실제 위젯 룰 그대로)</h2>
+    <div class="pill-row">
+      <span class="label-text">텍스트</span>
+      <div class="pill-buttons" id="bubblePills">
+        <button class="pill-btn active" data-bubble="off">OFF</button>
+        <button class="pill-btn" data-bubble="oneChar">한 자</button>
+        <button class="pill-btn" data-bubble="short">짧음</button>
+        <button class="pill-btn" data-bubble="medium">중간</button>
+        <button class="pill-btn" data-bubble="long">긴</button>
+      </div>
+    </div>
+    <div class="pill-row">
+      <span class="label-text">겹침 처리</span>
+      <div class="pill-buttons" id="overlapPills">
+        <button class="pill-btn active" data-overlap="bubble-front">말풍선 위</button>
+        <button class="pill-btn" data-overlap="notes-front">음표 위</button>
+        <button class="pill-btn" data-overlap="notes-dim">음표 흐리게</button>
+      </div>
+    </div>
+
+    <h2>그 외</h2>
+    <div class="check-row">
+      <label><input id="eyesClosed" type="checkbox" checked /> 눈 감기</label>
+      <label><input id="ringOn" type="checkbox" checked /> 터지는 링</label>
+      <label><input id="showGuide" type="checkbox" /> 가이드 표시</label>
+    </div>
+  </div>
+
+  <!-- ── Widget preview ──────────────────────────────────── -->
+  <div class="widget-stage">
+    <div class="widget" id="widget">
+      <div class="notes-layer">
+        <svg class="note n1" data-note></svg>
+        <svg class="note n2" data-note></svg>
+        <svg class="note n3" data-note></svg>
+        <svg class="note n4" data-note></svg>
+        <div class="burst-ring r1"></div>
+        <div class="burst-ring r2"></div>
+        <div class="burst-ring r3"></div>
+        <div class="burst-ring r4"></div>
+      </div>
+      <div class="widget-center-sim">
+        <div class="claude-pet-wrap">
+          <div class="speech-bubble" id="bubble"></div>
+          <svg class="claude-pet" data-pet></svg>
+        </div>
+        <div class="widget-pct-sim">70<span class="widget-pct-sym">%</span></div>
+        <div class="widget-remaining-sim">3h 20m</div>
+        <div class="widget-week-sim">week 15%</div>
+      </div>
+    </div>
+    <div class="widget-stage-meta">
+      실제 위젯과 동일한 px 단위로 표시되고 있어요. 슬라이더로 크기 변경 가능.
+    </div>
+  </div>
+
+</div>
+
+<p class="footer">
+  마음에 드는 설정이 나오면 그 값들 알려주세요 (또는 "현재 설정 그대로 적용"). 위젯에 통합합니다.
+</p>
+
+<script>
+  // ── Claw'd palette (same as ClaudePet.tsx)
+  const COLORS = {
+    happy:   { body: "#D96A47", eye: "#000000" },
+    worried: { body: "#D85B2E", eye: "#000000" },
+    alarm:   { body: "#E64545", eye: "#FF3B30" },
+  };
+
+  function buildPetInto(svg, mood) {
+    const c = COLORS[mood];
+    svg.setAttribute("viewBox", "0 0 20 13");
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    svg.setAttribute("shape-rendering", "crispEdges");
+    svg.innerHTML = `
+      <rect x="5" y="2" width="10" height="3" fill="${c.body}" />
+      <rect x="3" y="5" width="14" height="3" fill="${c.body}" />
+      <rect x="5" y="8" width="10" height="2" fill="${c.body}" />
+      <g class="pet-legs">
+        <rect x="5"    y="10" width="1.5" height="2.5" fill="${c.body}" />
+        <rect x="7.75" y="10" width="1.5" height="2.5" fill="${c.body}" />
+        <rect x="11"   y="10" width="1.5" height="2.5" fill="${c.body}" />
+        <rect x="13.5" y="10" width="1.5" height="2.5" fill="${c.body}" />
+      </g>
+      <rect class="pet-eye" x="6.5"   y="3.5" width="1.25" height="1.25" fill="${c.eye}" />
+      <rect class="pet-eye" x="12.25" y="3.5" width="1.25" height="1.25" fill="${c.eye}" />
+    `;
+  }
+
+  const NOTE_VARIANTS = {
+    eighth: `
+      <rect x="4" y="0" width="1" height="7" fill="currentColor" />
+      <rect x="5" y="1" width="1" height="2" fill="currentColor" />
+      <rect x="6" y="2" width="1" height="2" fill="currentColor" />
+      <rect x="1" y="6" width="3" height="3" fill="currentColor" />
+    `,
+    quarter: `
+      <rect x="4" y="0" width="1" height="7" fill="currentColor" />
+      <rect x="1" y="6" width="3" height="3" fill="currentColor" />
+    `,
+  };
+  function buildNoteInto(svg, variant) {
+    svg.setAttribute("viewBox", "0 0 7 10");
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    svg.setAttribute("shape-rendering", "crispEdges");
+    svg.innerHTML = NOTE_VARIANTS[variant];
+  }
+  function repaintPet(mood) {
+    document.querySelectorAll("[data-pet]").forEach((svg) => buildPetInto(svg, mood));
+  }
+  function paintNotesOnce() {
+    const types = ["eighth", "quarter", "eighth", "quarter"];
+    document.querySelectorAll("[data-note]").forEach((svg, i) => {
+      buildNoteInto(svg, types[i % types.length]);
+    });
+  }
+
+  // ── Slider plumbing: every slider just writes its value to a CSS var
+  function bindRange(id, valId, cssVar, unit, fmt) {
+    const inp = document.getElementById(id);
+    const out = document.getElementById(valId);
+    const apply = () => {
+      const v = parseFloat(inp.value);
+      document.documentElement.style.setProperty(cssVar, v + unit);
+      out.textContent = fmt ? fmt(v) : (v + unit);
+    };
+    inp.addEventListener("input", apply);
+    apply();
+  }
+  bindRange("widgetSize", "widgetSizeVal", "--widget-size", "px");
+  bindRange("clusterX",   "clusterXVal",   "--cluster-x",   "%");
+  bindRange("clusterY",   "clusterYVal",   "--cluster-y",   "%");
+  bindRange("hSpread",    "hSpreadVal",    "--h-spread",    "%");
+  bindRange("vSpread",    "vSpreadVal",    "--v-spread",    "%");
+  bindRange("noteSize",   "noteSizeVal",   "--note-size",   "px");
+  bindRange("speed",      "speedVal",      "--speed",       "",  (v) => v.toFixed(1) + "×");
+
+  function bindPills(containerId, onChoose) {
+    const pills = document.querySelectorAll(`#${containerId} .pill-btn`);
+    pills.forEach((p) => {
+      p.addEventListener("click", () => {
+        pills.forEach((q) => q.classList.remove("active"));
+        p.classList.add("active");
+        onChoose(p.dataset);
+      });
+    });
+  }
+
+  let currentMood = "happy";
+  bindPills("moodPills", (ds) => {
+    document.body.classList.remove("mood-happy", "mood-worried", "mood-alarm");
+    document.body.classList.add(`mood-${ds.mood}`);
+    currentMood = ds.mood;
+    repaintPet(currentMood);
+  });
+
+  bindPills("notePills", (ds) => {
+    document.body.classList.remove("notes-white", "notes-mint");
+    if (ds.noteColor === "white") document.body.classList.add("notes-white");
+    else if (ds.noteColor === "mint") document.body.classList.add("notes-mint");
+  });
+
+  bindPills("densityPills", (ds) => {
+    document.body.classList.remove("notes-off", "notes-sparse");
+    if (ds.density === "off") document.body.classList.add("notes-off");
+    else if (ds.density === "sparse") document.body.classList.add("notes-sparse");
+  });
+
+  // Bubble texts — chosen to span common widget line lengths
+  const BUBBLE_TEXTS = {
+    oneChar: "음",
+    short:   "잘 잤어요?",
+    medium:  "고리에 빈자리 많아요",
+    long:    "Claude는 글로, 저는 픽셀로 답해요",
+  };
+  const bubbleEl = document.getElementById("bubble");
+  bindPills("bubblePills", (ds) => {
+    document.body.classList.remove("bubble-on");
+    if (ds.bubble !== "off") {
+      document.body.classList.add("bubble-on");
+      bubbleEl.textContent = BUBBLE_TEXTS[ds.bubble];
+    }
+  });
+
+  bindPills("overlapPills", (ds) => {
+    document.body.classList.remove("notes-front", "notes-dim");
+    if (ds.overlap === "notes-front") document.body.classList.add("notes-front");
+    else if (ds.overlap === "notes-dim") document.body.classList.add("notes-dim");
+  });
+
+  document.getElementById("eyesClosed").addEventListener("change", (e) => {
+    document.body.classList.toggle("eyes-closed", e.target.checked);
+  });
+  document.getElementById("ringOn").addEventListener("change", (e) => {
+    document.body.classList.toggle("no-burst-ring", !e.target.checked);
+  });
+  document.getElementById("showGuide").addEventListener("change", (e) => {
+    document.body.classList.toggle("show-guide", e.target.checked);
+  });
+
+  repaintPet(currentMood);
+  paintNotesOnce();
+</script>
+
+</body>
+</html>

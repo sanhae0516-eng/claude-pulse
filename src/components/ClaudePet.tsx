@@ -1,5 +1,5 @@
 interface ClaudePetProps {
-  mood: "happy" | "worried" | "alarm";
+  mood: "happy" | "worried" | "alarm" | "dancing";
   onClick?: () => void;
 }
 
@@ -7,12 +7,16 @@ interface ClaudePetProps {
  * Claw'd — pixel-art mascot per the canonical design spec.
  *
  * Body color #D96A47, eye color #000000.
- * Idle: bob + eye blink. Alarm: red eyes + body shake.
- * Clickable when `onClick` is provided (used to trigger a speech bubble).
+ * Idle: bob + eye blink. Alarm: red eyes + body shake. Dancing: replaces the
+ * idle bob with a BC-1 jump+tilt motion driven by `.mood-dancing` in
+ * widget.css. Eye color follows happy palette during dance (alarm tint only
+ * when the actual alarm state is active and dancing isn't taking priority).
  */
 export function ClaudePet({ mood, onClick }: ClaudePetProps) {
   const orange =
-    mood === "alarm" ? "#E64545" : mood === "worried" ? "#D85B2E" : "#D96A47";
+    mood === "alarm" ? "#E64545" :
+    mood === "worried" ? "#D85B2E" :
+    "#D96A47"; // happy + dancing both use the standard orange
   const eye = mood === "alarm" ? "#FF3B30" : "#000000";
 
   const interactive = !!onClick;
