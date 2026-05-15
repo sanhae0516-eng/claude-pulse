@@ -49,6 +49,37 @@ struct OsCrypt {
 }
 
 fn claude_dir() -> Result<PathBuf, AuthError> {
+    // Claude Desktop shipped via the Microsoft Store is a UWP/AppX package
+    // whose `%APPDATA%\Claude\` writes get redirected to
+    // `%LOCALAPPDATA%\Packages\Claude_<pkgid>\LocalCache\Roaming\Claude\`.
+    // The legacy path still appears in `Get-Item` (Windows installs a
+    // package-redirection junction there) but reading it via Win32
+    // `CreateFileW` — which `std::fs` uses — returns ERROR_PATH_NOT_FOUND.
+    // So we look up the real container path first, and only fall back to
+    // the legacy location when no UWP package is present.
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local) = dirs::data_local_dir() {
+            let packages = local.join("Packages");
+            if let Ok(entries) = std::fs::read_dir(&packages) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name();
+                    if name.to_string_lossy().starts_with("Claude_") {
+                        let uwp = entry
+                            .path()
+                            .join("LocalCache")
+                            .join("Roaming")
+                            .join("Claude");
+                        if uwp.join("Local State").is_file() {
+                            return Ok(uwp);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: legacy Win32 install (or non-Store builds on other OSes).
     let mut p = dirs::config_dir()
         .ok_or_else(|| AuthError::NotFound("config dir".into()))?;
     p.push("Claude");

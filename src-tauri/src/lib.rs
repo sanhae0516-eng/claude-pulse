@@ -92,18 +92,25 @@ fn toggle_widget(app: &AppHandle) {
     }
 }
 
-/// (Currently unused) Win32 GDI region clip for OS-level rounded corners.
-/// Disabled in favor of CSS-only rounded corners — the GDI mask was clipping
-/// the backdrop-filter sample area on the webview, making the widget feel
-/// "plastic / opaque" compared to the music window. Kept around in case we
-/// want to opt back in for a single sharper variant.
+/// Win32 GDI region clip so the rectangular OS window matches the CSS
+/// rounded-rectangle shape. Without this, the four corners of the window
+/// — which the CSS `border-radius` rounds away — show through as
+/// transparent triangular wedges (the desktop bleeds through).
+///
+/// The ellipse diameter equals the CSS `border-radius` × 2 exactly. Any
+/// offset would expose a sub-pixel ring of WebView default background
+/// (white) between the rounded CSS shape and the region edge.
+///
+/// In tauri mode `.widget` has `backdrop-filter: none`, so clipping the
+/// window region does *not* shrink the backdrop sample area — the
+/// concern that originally motivated removing this call (v0.4.0
+/// glassmorphism unification) doesn't apply here.
 #[cfg(target_os = "windows")]
-#[allow(dead_code)]
 fn round_window_region(hwnd_raw: usize, width: i32, height: i32, radius: i32) {
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
     let hwnd: HWND = hwnd_raw as HWND;
-    let ellipse = (radius + 2) * 2;
+    let ellipse = radius * 2;
     unsafe {
         let rgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, ellipse, ellipse);
         SetWindowRgn(hwnd, rgn, 1);
@@ -204,24 +211,41 @@ pub fn run() {
 
             #[cfg(target_os = "windows")]
             {
-                // Rounded corners are CSS-only now (`border-radius` on `.widget`).
-                // The previous `SetWindowRgn` GDI clip looked sharper at the
-                // pixel level, but it shrank the backdrop-filter sample area
-                // so the widget felt plastic / opaque next to the music window.
-                // We still strip chrome bits and the window icon though — those
-                // are unrelated to backdrop sampling.
+                // CSS `border-radius: 18px` shapes the visible widget, but the
+                // OS window is still a rectangle — its four corners (which CSS
+                // rounds off) render as transparent triangular wedges showing
+                // the desktop. SetWindowRgn clips the window itself so those
+                // corners stop existing at the OS level. Backdrop-filter is
+                // already disabled in `.widget.in-tauri`, so we don't lose any
+                // glassmorphism by adding this clip back.
+                let radius = 18i32;
                 if let Ok(hwnd) = window.hwnd() {
                     let raw = hwnd.0 as usize;
                     force_popup_style(raw);
                     clear_window_icon(raw);
+                    if let Ok(size) = window.outer_size() {
+                        round_window_region(raw, size.width as i32, size.height as i32, radius);
+                    }
                 }
 
                 let win_clone = window.clone();
                 window.on_window_event(move |event| match event {
-                    WindowEvent::Resized(_size) => {
+                    WindowEvent::Resized(size) => {
                         // Music window follows the widget in lockstep — no JS
                         // round-trip per event keeps the drag smooth.
                         sync_music_to_main(&win_clone.app_handle());
+                        // Re-clip the rounded region on resize, otherwise the
+                        // previous clip stays at the old window size and the
+                        // new corners poke through.
+                        if let Ok(hwnd) = win_clone.hwnd() {
+                            let raw = hwnd.0 as usize;
+                            round_window_region(
+                                raw,
+                                size.width as i32,
+                                size.height as i32,
+                                radius,
+                            );
+                        }
                     }
                     WindowEvent::Moved(_) => {
                         sync_music_to_main(&win_clone.app_handle());
