@@ -38,6 +38,17 @@ windows-sys = { version = "0.59", features = [
 
 [target."cfg(target_os = \"macos\")".dependencies]
 window-vibrancy = "0.7"
+# Keychain access for "Claude Safe Storage" password (Chromium pattern).
+security-framework = "2"
+# PBKDF2-HMAC-SHA1 (1003 iterations, salt="saltysalt") → 16-byte AES-128 key,
+# same recipe Chromium uses on macOS to derive the OSCrypt master key.
+pbkdf2 = "0.12"
+sha1 = "0.10"
+hmac = "0.12"
+# AES-128-CBC for OSCrypt payloads on macOS (Windows uses GCM, so the
+# existing aes-gcm dep stays on its own target).
+cbc = { version = "0.1", features = ["block-padding"] }
+aes = "0.8"
 
 [profile.release]
 panic = "abort"

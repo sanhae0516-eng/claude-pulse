@@ -1,21 +1,31 @@
-//! Decrypts the OAuth access token that Claude Desktop stores in
-//! `%APPDATA%\Claude\config.json` under the `oauth:tokenCache` key.
+//! Decrypts the OAuth access token Claude Desktop stores in its Chromium-style
+//! `Local State` + `config.json` files. The format follows Chromium OSCrypt:
 //!
-//! Storage format mirrors Chromium's "v10" cookie encryption:
-//!   1. `Local State` JSON has `os_crypt.encrypted_key` — base64 of
-//!      `"DPAPI" + dpapi_blob`. Decrypt the dpapi_blob with the user's
-//!      DPAPI to get a 32-byte AES-256 master key.
-//!   2. `oauth:tokenCache` is base64 of `"v10" + nonce(12) + ciphertext + tag(16)`.
-//!      Decrypt with AES-256-GCM using the master key to get the token JSON.
+//! Windows (DPAPI + AES-256-GCM):
+//!   1. `Local State` → `os_crypt.encrypted_key` is base64 of `"DPAPI" + blob`.
+//!      User's DPAPI decrypts that → 32-byte AES-256 master key.
+//!   2. `oauth:tokenCache` is base64 of `"v10" + nonce(12) + ct + tag(16)`.
+//!      AES-256-GCM with the master key → plaintext token JSON.
 //!
-//! The plaintext is a JSON object containing at least `accessToken`.
+//! macOS (Keychain + AES-128-CBC):
+//!   1. Get "Claude Safe Storage" password from Keychain.
+//!      PBKDF2-HMAC-SHA1(password, salt="saltysalt", 1003 iter) → 16-byte key.
+//!   2. `Local State` → `os_crypt.encrypted_key` is base64 of `"v10" + ct`.
+//!      AES-128-CBC (key from step 1, IV = 16×0x20) → master key bytes.
+//!   3. `oauth:tokenCache` is base64 of `"v10" + ct`.
+//!      AES-128-CBC with the master key, same IV → plaintext token JSON.
+//!
+//! The plaintext on both is a JSON object containing at least `accessToken`.
 
-use aes_gcm::aead::Aead;
-use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
+
+#[cfg(target_os = "windows")]
+use aes_gcm::aead::Aead;
+#[cfg(target_os = "windows")]
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 
 #[derive(Debug)]
 pub enum AuthError {
@@ -79,7 +89,10 @@ fn claude_dir() -> Result<PathBuf, AuthError> {
         }
     }
 
-    // Fallback: legacy Win32 install (or non-Store builds on other OSes).
+    // Default: `dirs::config_dir()` resolves to the right Chromium-style
+    // path on each OS — `%APPDATA%\Claude` on Windows (Win32 install),
+    // `~/Library/Application Support/Claude` on macOS, `~/.config/Claude`
+    // on Linux. We just need to append "Claude".
     let mut p = dirs::config_dir()
         .ok_or_else(|| AuthError::NotFound("config dir".into()))?;
     p.push("Claude");
@@ -126,13 +139,7 @@ fn dpapi_decrypt(input: &[u8]) -> Result<Vec<u8>, AuthError> {
     Ok(result)
 }
 
-#[cfg(not(target_os = "windows"))]
-fn dpapi_decrypt(_input: &[u8]) -> Result<Vec<u8>, AuthError> {
-    Err(AuthError::Decrypt(
-        "DPAPI is only available on Windows".into(),
-    ))
-}
-
+#[cfg(target_os = "windows")]
 fn read_master_key() -> Result<Vec<u8>, AuthError> {
     let path = claude_dir()?.join("Local State");
     let body = fs::read_to_string(&path).map_err(|e| {
@@ -151,6 +158,66 @@ fn read_master_key() -> Result<Vec<u8>, AuthError> {
     dpapi_decrypt(&raw[5..])
 }
 
+/// macOS Chromium OSCrypt: master key lives encrypted in `Local State` as
+/// `"v10" + AES-128-CBC(payload)`. The CBC key is PBKDF2-HMAC-SHA1 of a
+/// Keychain-stored password.
+///
+/// Keychain service name is the Electron product name + " Safe Storage";
+/// for Claude Desktop this is "Claude Safe Storage" / "Claude". If it ever
+/// changes (rename, electron-builder config tweak) the Keychain Access app
+/// shows the actual name — that's where to look on a failing install.
+#[cfg(target_os = "macos")]
+fn read_master_key() -> Result<Vec<u8>, AuthError> {
+    use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+    use pbkdf2::pbkdf2_hmac;
+    use security_framework::passwords::get_generic_password;
+    use sha1::Sha1;
+
+    type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
+
+    // 1. Keychain → password bytes.
+    let password = get_generic_password("Claude Safe Storage", "Claude")
+        .map_err(|e| AuthError::Decrypt(format!("keychain lookup: {e}")))?;
+
+    // 2. Derive AES-128 key (Chromium constants).
+    let mut derived = [0u8; 16];
+    pbkdf2_hmac::<Sha1>(&password, b"saltysalt", 1003, &mut derived);
+
+    // 3. Read & decode `Local State` → encrypted_key.
+    let path = claude_dir()?.join("Local State");
+    let body = fs::read_to_string(&path).map_err(|e| {
+        AuthError::NotFound(format!("Local State at {}: {e}", path.display()))
+    })?;
+    let state: LocalState =
+        serde_json::from_str(&body).map_err(|e| AuthError::Parse(e.to_string()))?;
+    let raw = B64
+        .decode(state.os_crypt.encrypted_key.as_bytes())
+        .map_err(|e| AuthError::Decode(e.to_string()))?;
+
+    // 4. "v10" prefix → CBC ciphertext.
+    if raw.len() < 3 || &raw[..3] != b"v10" {
+        return Err(AuthError::Decode(
+            "encrypted_key missing v10 prefix".into(),
+        ));
+    }
+    let mut buf = raw[3..].to_vec();
+
+    // 5. AES-128-CBC with IV = 16 spaces (Chromium convention).
+    let cipher = Aes128CbcDec::new(&derived.into(), &[b' '; 16].into());
+    let plaintext = cipher
+        .decrypt_padded_mut::<Pkcs7>(&mut buf)
+        .map_err(|e| AuthError::Decrypt(format!("CBC decrypt master key: {e:?}")))?;
+
+    Ok(plaintext.to_vec())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn read_master_key() -> Result<Vec<u8>, AuthError> {
+    Err(AuthError::Decrypt(
+        "Claude Pulse currently only supports Windows and macOS".into(),
+    ))
+}
+
 fn read_token_blob() -> Result<Vec<u8>, AuthError> {
     let path = claude_dir()?.join("config.json");
     let body = fs::read_to_string(&path).map_err(|e| {
@@ -166,7 +233,12 @@ fn read_token_blob() -> Result<Vec<u8>, AuthError> {
         .map_err(|e| AuthError::Decode(e.to_string()))
 }
 
-fn aes_gcm_decrypt(key: &[u8], blob: &[u8]) -> Result<Vec<u8>, AuthError> {
+/// Decrypts a Chromium OSCrypt `"v10" + ciphertext` blob with the given
+/// master key. Algorithm differs per OS:
+///   - Windows: AES-256-GCM, 12-byte nonce after the prefix, 16-byte tag.
+///   - macOS:   AES-128-CBC with fixed IV (16 × space). No nonce, no tag.
+#[cfg(target_os = "windows")]
+fn decrypt_payload(key: &[u8], blob: &[u8]) -> Result<Vec<u8>, AuthError> {
     if blob.len() < 3 + 12 + 16 || &blob[..3] != b"v10" {
         return Err(AuthError::Decode(
             "token blob missing v10 prefix or too short".into(),
@@ -179,6 +251,37 @@ fn aes_gcm_decrypt(key: &[u8], blob: &[u8]) -> Result<Vec<u8>, AuthError> {
     cipher
         .decrypt(Nonce::from_slice(nonce), ciphertext_with_tag)
         .map_err(|e| AuthError::Decrypt(e.to_string()))
+}
+
+#[cfg(target_os = "macos")]
+fn decrypt_payload(key: &[u8], blob: &[u8]) -> Result<Vec<u8>, AuthError> {
+    use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+    type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
+
+    if blob.len() < 3 || &blob[..3] != b"v10" {
+        return Err(AuthError::Decode(
+            "token blob missing v10 prefix".into(),
+        ));
+    }
+    if key.len() != 16 {
+        return Err(AuthError::Decrypt(format!(
+            "expected 16-byte master key on macOS, got {} bytes",
+            key.len()
+        )));
+    }
+    let mut buf = blob[3..].to_vec();
+    let cipher = Aes128CbcDec::new(key.into(), &[b' '; 16].into());
+    let plaintext = cipher
+        .decrypt_padded_mut::<Pkcs7>(&mut buf)
+        .map_err(|e| AuthError::Decrypt(format!("CBC decrypt token: {e:?}")))?;
+    Ok(plaintext.to_vec())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn decrypt_payload(_key: &[u8], _blob: &[u8]) -> Result<Vec<u8>, AuthError> {
+    Err(AuthError::Decrypt(
+        "Claude Pulse currently only supports Windows and macOS".into(),
+    ))
 }
 
 fn debug_log(msg: &str) {
@@ -275,11 +378,14 @@ pub fn get_access_token() -> Result<String, AuthError> {
     })?;
     debug_log(&format!("read_token_blob ok (blob_len={})", blob.len()));
 
-    let plaintext = aes_gcm_decrypt(&key, &blob).map_err(|e| {
-        debug_log(&format!("aes_gcm_decrypt FAILED: {e}"));
+    let plaintext = decrypt_payload(&key, &blob).map_err(|e| {
+        debug_log(&format!("decrypt_payload FAILED: {e}"));
         e
     })?;
-    debug_log(&format!("aes_gcm_decrypt ok (plaintext_len={})", plaintext.len()));
+    debug_log(&format!(
+        "decrypt_payload ok (plaintext_len={})",
+        plaintext.len()
+    ));
 
     let root: serde_json::Value = serde_json::from_slice(&plaintext).map_err(|e| {
         debug_log(&format!("plaintext JSON parse FAILED: {e}"));
