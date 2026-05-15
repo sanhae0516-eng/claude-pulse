@@ -1,0 +1,83 @@
+name: Build macOS
+
+# Builds an arm64 .dmg + .app on every push to main / the macOS feature
+# branch, and uploads them as workflow artifacts. Designed so a person
+# without a local Mac can rent a cloud Mac for ~30 min purely to run the
+# resulting bundle and capture debug logs — no Xcode / Rust install on
+# the rented machine.
+#
+# Manual triggering is wired up too (workflow_dispatch) so you can
+# re-build from any branch without pushing a dummy commit.
+
+on:
+  push:
+    branches: [main, "feat/macos-support"]
+    paths-ignore:
+      - "**/*.md"
+      - "preview/**"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "preview/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build macOS arm64 bundle
+    runs-on: macos-latest  # macos-14, Apple Silicon
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Rust (stable, aarch64-apple-darwin)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      # Cache the cargo registry + the src-tauri target dir so subsequent
+      # runs land in ~5-7 min instead of the first run's ~15 min. Key is
+      # tied to Cargo.lock so dependency changes naturally invalidate.
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          cache-on-failure: true
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build (release bundle)
+        run: npm run tauri build -- --target aarch64-apple-darwin
+        env:
+          # No Apple Developer ID available, so let Tauri ad-hoc sign.
+          # The .app will launch but users get a Gatekeeper warning on
+          # first run — right-click → Open is the manual bypass.
+          CI: true
+
+      # Upload the .dmg (installer) — primary artifact most people want.
+      - name: Upload .dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-pulse-macos-arm64-dmg
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+      # Upload the .app directly too. Useful if the user wants to run it
+      # without mounting the .dmg (faster on a short cloud-Mac session).
+      - name: Upload .app
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-pulse-macos-arm64-app
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: warn
+          retention-days: 14
