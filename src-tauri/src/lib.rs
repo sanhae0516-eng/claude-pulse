@@ -184,11 +184,19 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&toggle, &separator, &quit])?;
 
-            let _tray = TrayIconBuilder::with_id("main")
+            // On Windows the convention is: left-click toggles, right-click
+            // opens the menu — so we suppress the auto-menu on left click and
+            // wire our own click handler. macOS menubar items expect a click
+            // to *always* open the menu (no left/right distinction at all),
+            // and `show_menu_on_left_click(false)` there leaves the icon
+            // unresponsive in practice — so we let the menu auto-open.
+            let tray_builder = TrayIconBuilder::with_id("main")
                 .tooltip("Claude Pulse")
                 .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .show_menu_on_left_click(false)
+                .menu(&menu);
+            #[cfg(target_os = "windows")]
+            let tray_builder = tray_builder.show_menu_on_left_click(false);
+            let _tray = tray_builder
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "toggle" => toggle_widget(app),
                     "quit" => app.exit(0),
@@ -266,6 +274,13 @@ pub fn run() {
                     _ => {}
                 });
             }
+
+            // Defensive: make sure the window is visible + focused at startup.
+            // Without this the widget can launch into a hidden state on macOS
+            // (the Windows-only cfg block above doesn't run there, and nothing
+            // else in setup() guarantees visibility).
+            let _ = window.show();
+            let _ = window.set_focus();
 
             Ok(())
         })

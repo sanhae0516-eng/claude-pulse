@@ -25,8 +25,8 @@
         "skipTaskbar": true,
         "shadow": false,
         "center": false,
-        "x": 1600,
-        "y": 80
+        "x": 100,
+        "y": 100
       }
     ],
     "security": {
