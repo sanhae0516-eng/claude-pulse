@@ -135,18 +135,62 @@ fn clear_window_icon(hwnd_raw: usize) {
     }
 }
 
-/// Strip chrome (title bar / min-max-close / thick frame) from the window
-/// while preserving every other style bit Tauri set up. Wholesale-replacing
-/// GWL_EXSTYLE clobbers WS_EX_LAYERED which Tauri uses for transparency,
-/// freezing the webview — so we mask out only the chrome bits in GWL_STYLE
-/// and leave GWL_EXSTYLE alone.
+/// Window-proc subclass that intercepts the two messages Windows uses to
+/// draw chrome:
+///
+///   - `WM_NCCALCSIZE` (with `wparam = TRUE`): the system asks "what part of
+///     the window is non-client (chrome) area?". Returning 0 says "none —
+///     the entire window is client area", so no title bar / borders are
+///     ever allocated regardless of `WS_CAPTION` etc.
+///   - `WM_NCACTIVATE`: the system tells the window to repaint its chrome
+///     active/inactive on focus change. We return 1 (TRUE) to say "handled"
+///     so `DefWindowProcW` doesn't get a chance to redraw.
+///
+/// This is the load-bearing fix for the focus-change-brings-back-chrome
+/// bug; manipulating GWL_STYLE alone is reactive (DWM redraws chrome
+/// between the focus event and our handler running) while this is
+/// preventative (chrome is never asked to draw in the first place).
+#[cfg(target_os = "windows")]
+extern "system" fn chromeless_subclass_proc(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    msg: u32,
+    wparam: windows_sys::Win32::Foundation::WPARAM,
+    lparam: windows_sys::Win32::Foundation::LPARAM,
+    _u_id_subclass: usize,
+    _dw_ref_data: usize,
+) -> windows_sys::Win32::Foundation::LRESULT {
+    use windows_sys::Win32::UI::Shell::DefSubclassProc;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{WM_NCACTIVATE, WM_NCCALCSIZE};
+    match msg {
+        WM_NCCALCSIZE if wparam != 0 => 0,
+        WM_NCACTIVATE => 1,
+        _ => unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) },
+    }
+}
+
+/// Install `chromeless_subclass_proc` on the given HWND. Safe to call
+/// repeatedly — `SetWindowSubclass` with the same id is a no-op.
+#[cfg(target_os = "windows")]
+fn install_chromeless_subclass(hwnd_raw: usize) {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::Shell::SetWindowSubclass;
+    let hwnd: HWND = hwnd_raw as HWND;
+    unsafe {
+        SetWindowSubclass(hwnd, Some(chromeless_subclass_proc), 1, 0);
+    }
+}
+
+/// Strip chrome and lock the window in WS_POPUP style. Kept around as a
+/// belt-and-suspenders alongside the wndproc subclass — the style change
+/// helps with Tauri's own bookkeeping and influences alt-tab behavior.
 #[cfg(target_os = "windows")]
 fn force_popup_style(hwnd_raw: usize) {
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE,
         SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-        WS_CAPTION, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU, WS_THICKFRAME,
+        WS_CAPTION, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU,
+        WS_THICKFRAME,
     };
     let hwnd: HWND = hwnd_raw as HWND;
     unsafe {
@@ -156,7 +200,8 @@ fn force_popup_style(hwnd_raw: usize) {
             | WS_MINIMIZEBOX
             | WS_MAXIMIZEBOX
             | WS_SYSMENU) as isize;
-        SetWindowLongPtrW(hwnd, GWL_STYLE, cur & !chrome_bits);
+        let new_style = (cur & !chrome_bits) | (WS_POPUP as isize);
+        SetWindowLongPtrW(hwnd, GWL_STYLE, new_style);
         SetWindowPos(
             hwnd,
             std::ptr::null_mut(),
@@ -221,6 +266,11 @@ pub fn run() {
                 let radius = 18i32;
                 if let Ok(hwnd) = window.hwnd() {
                     let raw = hwnd.0 as usize;
+                    // Subclass FIRST so the very first WM_NCCALCSIZE that
+                    // comes through (during the immediate frame refresh
+                    // below) is already handled by our zero-NC-area
+                    // override.
+                    install_chromeless_subclass(raw);
                     force_popup_style(raw);
                     clear_window_icon(raw);
                     if let Ok(size) = window.outer_size() {
@@ -234,11 +284,12 @@ pub fn run() {
                         // Music window follows the widget in lockstep — no JS
                         // round-trip per event keeps the drag smooth.
                         sync_music_to_main(&win_clone.app_handle());
-                        // Re-clip the rounded region on resize, otherwise the
-                        // previous clip stays at the old window size and the
-                        // new corners poke through.
+                        // Re-clip the rounded region on resize, and re-mask
+                        // chrome bits — DWM sometimes re-asserts WS_CAPTION /
+                        // WS_THICKFRAME when the window changes size.
                         if let Ok(hwnd) = win_clone.hwnd() {
                             let raw = hwnd.0 as usize;
+                            force_popup_style(raw);
                             round_window_region(
                                 raw,
                                 size.width as i32,
@@ -249,6 +300,27 @@ pub fn run() {
                     }
                     WindowEvent::Moved(_) => {
                         sync_music_to_main(&win_clone.app_handle());
+                    }
+                    // DWM brings WS_CAPTION + WS_THICKFRAME back the moment the
+                    // window loses or regains focus. We have to fight it on
+                    // TWO levels: Tauri's `set_decorations(false)` triggers
+                    // its own internal frame refresh, and our manual
+                    // `force_popup_style` enforces WS_POPUP at the Win32
+                    // layer. Calling both seems to be what finally sticks.
+                    WindowEvent::Focused(_) => {
+                        let _ = win_clone.set_decorations(false);
+                        if let Ok(hwnd) = win_clone.hwnd() {
+                            let raw = hwnd.0 as usize;
+                            force_popup_style(raw);
+                            if let Ok(size) = win_clone.outer_size() {
+                                round_window_region(
+                                    raw,
+                                    size.width as i32,
+                                    size.height as i32,
+                                    radius,
+                                );
+                            }
+                        }
                     }
                     WindowEvent::CloseRequested { api, .. } => {
                         // X / Alt-F4 hides to tray instead of quitting.
