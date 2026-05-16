@@ -1,6 +1,6 @@
 [package]
 name = "claude-pulse"
-version = "0.4.1"
+version = "0.4.2"
 description = "Claude Code usage monitor widget"
 authors = ["산해"]
 edition = "2021"
